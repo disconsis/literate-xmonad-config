@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+notify-send "XMonad" "Building XMonad"
+
+# tangle the org file
+emacs --batch -l org --eval '(org-babel-tangle-file "src/config.org")'
+
+stack build
+status=$?
+
+if [[ $status -ne 0 ]]; then
+    notify-send --urgency=critical "XMonad" "Building failed!"
+    exit $status
+else
+    notify-send "XMonad" "Build successful"
+fi
