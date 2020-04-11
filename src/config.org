@@ -1,0 +1,19 @@
+#+TITLE: disconsis' literate XMonad configuration
+#+AUTHOR: Ketan Kanishka (=disconsis=)
+#+PROPERTY: header-args :tangle yes
+
+* Main
+:PROPERTIES:
+:header-args: :tangle "Main.hs"
+:END:
+
+There's a lot better preludes out there, including [[https://tech.fpcomplete.com/haskell/library/rio][FPComplete's recommendation]] of =RIO=.
+#+begin_src haskell
+  import RIO
+#+end_src
+
+
+#+begin_src haskell
+  main :: IO ()
+  main = mempty
+#+end_src
