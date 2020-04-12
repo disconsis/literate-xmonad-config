@@ -3,4 +3,4 @@
 TEST_DISPLAY=:1
 
 Xephyr $TEST_DISPLAY -reset -terminate -resizeable &
-DISPLAY=$TEST_DISPLAY stack run
+DISPLAY=$TEST_DISPLAY stack run -- --test

@@ -6,17 +6,20 @@
 Libraries for system IO actions
 #+begin_src haskell
 import System.Posix.Process (executeFile)
+import System.Environment (getArgs)
 #+end_src
 
 Base =XMonad= import(s)
 #+begin_src haskell
-import XMonad (launch, def, XConfig(..))
+import XMonad
 #+end_src
 
 * Config
 #+begin_src haskell
 myConfig = def
-  { terminal = myTerminal
+  { terminal        = myTerminal
+  , modMask         = myModMask
+  , handleExtraArgs = handleTestConditions
   }
 #+end_src
 
@@ -26,6 +29,20 @@ Preferred terminal is kitty (for the ligatures) with tmux (for splitting).
 myTerminal = "kitty tmux -2"
 #+end_src
 
+** Mod key (default and test)
+Selecting the mod key is a bit trickier than expected to be able to test the config in an inferior X session.
+The key I want to use is =Alt= (=mod1Mask=), but if I'm also using this config while testing a modified version of it,
+then those keypresses are intercepted by XMonad and not passed to the inferior X session. The simplest way to get
+around this is to switch to =Super= (=mod4Mask=) when an additional =--test= argument is passed.
+#+begin_src haskell
+myModMask   = mod1Mask
+testModMask = mod4Mask
+
+handleTestConditions :: [String] -> XConfig Layout -> IO (XConfig Layout)
+handleTestConditions args config = case args of
+  []         -> return config
+  ["--test"] -> return config { modMask = testModMask }
+  otherwise  -> putStrLn ("Unexpected arguments encountered: " ++ show args) >> return config
 #+end_src
 
 * Running
@@ -41,5 +58,9 @@ This makes it a lot more complicated to think about as we might reenter =main= a
 To keep things simple, in this configuration, building is handled by the =build= script which can be executed by hand or during recompilation through the executable.
 #+begin_src haskell
 main :: IO ()
-main = launch myConfig
+main = do
+  args <- getArgs
+  conf' @ XConfig { layoutHook = Layout l }
+                  <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
+  launch $ conf' { layoutHook = l }
 #+end_src
