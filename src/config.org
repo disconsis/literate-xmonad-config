@@ -10,12 +10,20 @@ Libraries for system IO actions
 
 Base =XMonad= import(s)
 #+begin_src haskell
-  import XMonad (launch, def)
+  import XMonad (launch, def, XConfig(..))
 #+end_src
 
 * Config
 #+begin_src haskell
   myConfig = def
+    { terminal = myTerminal
+    }
+#+end_src
+
+** Terminal
+Preferred terminal is kitty (for the ligatures) with tmux (for splitting).
+#+begin_src haskell
+  myTerminal = "kitty tmux -2"
 #+end_src
 
 * Running
