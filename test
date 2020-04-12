@@ -2,5 +2,15 @@
 
 TEST_DISPLAY=:1
 
-Xephyr $TEST_DISPLAY -reset -terminate -resizeable 1>/dev/null 2>&1 &
-DISPLAY=$TEST_DISPLAY stack run -- --test
+Xephyr $TEST_DISPLAY +xinerama +extension RANDR \
+       -ac -br -reset -terminate -softCursor -resizeable \
+       1>/dev/null 2>&1 &
+
+export DISPLAY=":1"
+
+# for some reason restarting xmonad without any windows
+# makes "openDisplay" fail, so we open a random window
+sleep 2 # wait for windows to appear
+xclock 1>/dev/null 2>&1 &
+
+stack run -- --test $@

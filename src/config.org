@@ -5,8 +5,15 @@
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
+import System.Process (system)
 import System.Posix.Process (executeFile)
 import System.Environment (getArgs)
+import System.Exit (exitSuccess)
+#+end_src
+
+Some general libraries
+#+begin_src haskell
+import Control.Monad
 #+end_src
 
 Base =XMonad= import(s)
@@ -46,10 +53,20 @@ handleTestConditions args config = case args of
 #+end_src
 
 * Running
-** Recompilation
+** Restarting
+Copied almost verbatim from =XMonad.Operations.restart=
+=uninstallSignalHandlers= is needed to get =stack build= to work correctly, since it otherwise
+ignores the =SIGCHLD= signals it needs to function correctly
 #+begin_src haskell
-recompile :: IO ()
-recompile = executeFile "build" False [] Nothing
+restartConfig :: Bool -> X ()
+restartConfig resume = do
+  uninstallSignalHandlers
+  io $ system "./build"
+  broadcastMessage ReleaseResources
+  io . flush =<< asks display
+  when resume writeStateToFile
+  origArgs <- io getArgs
+  catchIO (executeFile "./launch" True origArgs Nothing)
 #+end_src
 
 ** Main
