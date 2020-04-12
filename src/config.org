@@ -1,19 +1,35 @@
 #+TITLE: disconsis' literate XMonad configuration
 #+AUTHOR: Ketan Kanishka (=disconsis=)
-#+PROPERTY: header-args :tangle yes
+#+PROPERTY: header-args :tangle "Main.hs"
 
-* Main
-:PROPERTIES:
-:header-args: :tangle "Main.hs"
-:END:
-
-There's a lot better preludes out there, including [[https://tech.fpcomplete.com/haskell/library/rio][FPComplete's recommendation]] of =RIO=.
+* Imports
+Libraries for system IO actions
 #+begin_src haskell
-  import RIO
+  import System.Posix.Process (executeFile)
 #+end_src
 
+Base =XMonad= import(s)
+#+begin_src haskell
+  import XMonad (launch, def)
+#+end_src
 
+* Config
+#+begin_src haskell
+  myConfig = def
+#+end_src
+
+* Running
+** Recompilation
+#+begin_src haskell
+  recompile :: IO ()
+  recompile = executeFile "build" False [] Nothing
+#+end_src
+
+** Main
+The default =xmonad= executable handles a lot of things in its =main= -- replacing, resuming, building etc.
+This makes it a lot more complicated to think about as we might reenter =main= at any point while maintaining state in the filesystem.
+To keep things simple, in this configuration, building is handled by the =build= script which can be executed by hand or during recompilation through the executable.
 #+begin_src haskell
   main :: IO ()
-  main = mempty
+  main = launch myConfig
 #+end_src

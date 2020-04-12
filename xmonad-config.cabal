@@ -23,10 +23,9 @@ executable xmonad
   other-modules:
 
   build-depends:
-      rio
+      base
     , xmonad
     , xmonad-contrib
+    , unix
 
   default-extensions:
-      NoImplicitPrelude
-    , OverloadedStrings
