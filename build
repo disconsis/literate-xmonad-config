@@ -2,8 +2,9 @@
 
 notify-send "XMonad" "Building XMonad"
 
-# tangle the org file
-emacs --batch -l org --eval '(org-babel-tangle-file "src/config.org")'
+# tangle the org file -- `ntangle` is much faster than the elisp implementation
+# see [[https://github.com/OrgTangle/ntangle]]
+ntangle src/config.org
 
 stack build
 status=$?
