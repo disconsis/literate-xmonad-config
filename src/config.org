@@ -21,12 +21,19 @@ Base =XMonad= import(s)
 import XMonad
 #+end_src
 
+=EZConfig= for emacs-style keybinding descriptions
+#+begin_src haskell
+import XMonad.Util.EZConfig (mkKeymap, checkKeymap)
+#+end_src
+
 * Config
 #+begin_src haskell
 myConfig = def
   { terminal        = myTerminal
   , modMask         = myModMask
   , handleExtraArgs = handleTestConditions
+  , keys            = myKeymap
+  , startupHook     = myStartupHook
   }
 #+end_src
 
@@ -50,6 +57,32 @@ handleTestConditions args config = case args of
   []         -> return config
   ["--test"] -> return config { modMask = testModMask }
   otherwise  -> putStrLn ("Unexpected arguments encountered: " ++ show args) >> return config
+#+end_src
+
+** Keys
+#+begin_src haskell
+myKeymap = flip mkKeymap myKeys
+myKeys = concat
+  [ xmonadControlKeys
+  ]
+#+end_src
+
+*** Controlling XMonad
+Keys for restarting, recompiling, quitting (etc?) XMonad
+#+begin_src haskell
+xmonadControlKeys =
+  [ ("M-`", restartConfig True)
+  , ("M-S-C-`", io exitSuccess)
+  ]
+#+end_src
+
+** Startup actions
+First thing we should do is check our keybindings for errors and duplicates.
+The =return ()= is neccessary to add some lazinesss to prevent the infinite loop of =myConfig -> myStartupHook -> myConfig -> ...= (see the docs for [[https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-EZConfig.html#v:checkKeymap][checkKeymap]] for more details)
+#+begin_src haskell
+  myStartupHook :: X ()
+  myStartupHook = do
+    return () >> checkKeymap myConfig myKeys
 #+end_src
 
 * Running
