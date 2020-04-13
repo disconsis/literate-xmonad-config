@@ -94,12 +94,12 @@ ignores the =SIGCHLD= signals it needs to function correctly
 restartConfig :: Bool -> X ()
 restartConfig resume = do
   uninstallSignalHandlers
-  io $ system "./build"
+  io $ system "bin/build"
   broadcastMessage ReleaseResources
   io . flush =<< asks display
   when resume writeStateToFile
   origArgs <- io getArgs
-  catchIO (executeFile "./launch" True origArgs Nothing)
+  catchIO (executeFile "bin/launch" True origArgs Nothing)
 #+end_src
 
 ** Main
