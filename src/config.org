@@ -14,6 +14,7 @@ import System.Exit (exitSuccess)
 Some general libraries
 #+begin_src haskell
 import Control.Monad
+import qualified Data.Map as M
 #+end_src
 
 Base =XMonad= import(s)
@@ -23,7 +24,45 @@ import XMonad
 
 =EZConfig= for emacs-style keybinding descriptions
 #+begin_src haskell
-import XMonad.Util.EZConfig (mkKeymap, checkKeymap)
+import XMonad.Util.EZConfig (mkKeymap, checkKeymap, mkNamedKeymap)
+#+end_src
+
+Libraries for =which-key= emulation
+#+begin_src haskell
+import XMonad.Util.Dzen
+import XMonad.Util.Font (Align(..))
+import XMonad.Util.NamedActions
+import XMonad.Actions.Submap (submap)
+#+end_src
+
+* Which-key
+The emacs =which-key= package is a great discovery tool. This is a feeble attempt at emulating it.
+
+We use =dzen= with some basic settings to display text on the screen
+#+begin_src haskell
+displayText :: String -> X ()
+displayText text = dzenConfig (lineCount numLines >=> unCollapse >=> slaveAlign AlignCenter) text
+  where
+    numLines = max 0 (length (lines text) - 1)          -- we only count slave lines, so everything after the first one
+    unCollapse = addArgs [ "-e", "onstart=uncollapse" ] -- we need to uncollapse at start, otherwise slave lines are only visible on mouseover
+#+end_src
+
+The original =which-key= activates after a delay whenever a keybind is partially completed. This would probably be quite hard to achieve in XMonad,
+although it's something I would eventually want. In the meantime, a useful compromise is to add a key (say, ~?~ aka ~S-/~) as an extra keybind in each submap.
+Let's define a custom submap function for that. Unfortunately, the =NamedActions= module doesn't export =getAction :: NamedAction -> X ()=, which means we have to
+work around it using the functions it /does/ export. See [[opening-apps]] for a usage example.
+=showKm= isn't a great pretty-printer for the help, it would be nice to improve on this later.
+*************** TODO use a better pretty-printer than =showKm=. try to make it print ~S-/~ as ~?~
+*************** END
+*NOTE*: this will cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
+#+begin_src haskell
+whichkeySubmap :: (LayoutClass l Window, Read (l Window)) => XConfig l -> [(String, NamedAction)] -> X ()
+whichkeySubmap config keybinds = submap $ keys config' config' { layoutHook = Layout (layoutHook config') }
+  where
+    whichkeyBind = (shiftMask, xK_slash)
+    whichkeyAction = addName "Show this help" . displayText . unlines . showKm
+    keymap = mkNamedKeymap config keybinds
+    config' = addDescrKeys' (whichkeyBind, whichkeyAction) (pure keymap) config
 #+end_src
 
 * Config
@@ -64,6 +103,7 @@ handleTestConditions args config = case args of
 myKeymap = flip mkKeymap myKeys
 myKeys = concat
   [ xmonadControlKeys
+  , applicationKeys
   ]
 #+end_src
 
@@ -74,6 +114,15 @@ xmonadControlKeys =
   [ ("M-`", restartConfig True)
   , ("M-S-C-`", io exitSuccess)
   ]
+#+end_src
+
+*** Opening applications
+Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~, but it's faster to have some shortcuts for commonly used apps.
+#+name: opening-apps
+#+begin_src haskell
+applicationKeys = [ ("M-u", whichkeySubmap myConfig apps) ]
+  where
+    apps = [ ("f", spawn' "firefox") ]
 #+end_src
 
 ** Startup actions
