@@ -120,9 +120,16 @@ xmonadControlKeys =
 Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~, but it's faster to have some shortcuts for commonly used apps.
 #+name: opening-apps
 #+begin_src haskell
-applicationKeys = [ ("M-u", whichkeySubmap myConfig apps) ]
+applicationKeys = [ ("M-u", whichkeySubmap myConfig $ launch <$> apps) ]
   where
-    apps = [ ("f", spawn' "firefox") ]
+    launch (key, description, command) = (key, addName description $ spawn command)
+    apps = [ ("t"  , "Terminal"    , terminal myConfig)
+           , ("e"  , "Emacs Client", "emacsclient -c")
+           , ("S-e", "Emacs"       , "emacs")
+           , ("f"  , "Firefox"     , "firefox")
+           , ("r"  , "Ranger"      , "$TERMINAL ranger")
+           , ("w"  , "WhatsApp"    , "whatsapp.sh")
+           ]
 #+end_src
 
 ** Startup actions
