@@ -35,6 +35,11 @@ import XMonad.Util.NamedActions
 import XMonad.Actions.Submap (submap)
 #+end_src
 
+Change the cursor
+#+begin_src haskell
+import XMonad.Util.Cursor (setDefaultCursor, xC_left_ptr)
+#+end_src
+
 * Which-key
 The emacs =which-key= package is a great discovery tool. This is a feeble attempt at emulating it.
 
@@ -140,10 +145,12 @@ applicationKeys = [ ("M-u", whichkeySubmap myConfig $ launch <$> apps) ]
 ** Startup actions
 First thing we should do is check our keybindings for errors and duplicates.
 The =return ()= is neccessary to add some lazinesss to prevent the infinite loop of =myConfig -> myStartupHook -> myConfig -> ...= (see the docs for [[https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-EZConfig.html#v:checkKeymap][checkKeymap]] for more details)
+The default cursor is also... not the best - change it to something more standard.
 #+begin_src haskell
   myStartupHook :: X ()
   myStartupHook = do
     return () >> checkKeymap myConfig myKeys
+    setDefaultCursor xC_left_ptr
 #+end_src
 
 * Running
