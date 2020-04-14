@@ -51,9 +51,6 @@ The original =which-key= activates after a delay whenever a keybind is partially
 although it's something I would eventually want. In the meantime, a useful compromise is to add a key (say, ~?~ aka ~S-/~) as an extra keybind in each submap.
 Let's define a custom submap function for that. Unfortunately, the =NamedActions= module doesn't export =getAction :: NamedAction -> X ()=, which means we have to
 work around it using the functions it /does/ export. See [[opening-apps]] for a usage example.
-=showKm= isn't a great pretty-printer for the help, it would be nice to improve on this later.
-*************** TODO use a better pretty-printer than =showKm=. try to make it print ~S-/~ as ~?~
-*************** END
 *NOTE*: this will cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
 #+begin_src haskell
 whichkeySubmap :: (LayoutClass l Window, Read (l Window)) => XConfig l -> [(String, NamedAction)] -> X ()
@@ -65,6 +62,14 @@ whichkeySubmap config keybinds = submap $ keys config' config' { layoutHook = La
     config' = addDescrKeys' (whichkeyBind, whichkeyAction) (pure keymap) config
 #+end_src
 
+
+=showKm= isn't a great pretty-printer for the help, it would be nice to improve on this later.
+Things that could be improved on:
+1. =showKm= prints shift-masked characters as ~S-<char>~, but it's arguable clearer to display them as their capitalized versions (eg. ~S-/~ vs ~?~)
+2. Output is not columnar, since we're just centering every line and line lengths are not the same.
+3. =dzen= supports full pango markup, so it could prettified a lot more with colors and stuff.
+*************** TODO use a better pretty-printer than =showKm=.
+*************** END
 * Config
 #+begin_src haskell
 myConfig = def
