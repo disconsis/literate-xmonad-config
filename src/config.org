@@ -155,19 +155,28 @@ The default cursor is also... not the best - change it to something more standar
 
 * Running
 ** Restarting
-Copied almost verbatim from =XMonad.Operations.restart=
+=restartConfig= copied almost verbatim from =XMonad.Operations.restart=
 =uninstallSignalHandlers= is needed to get =stack build= to work correctly, since it otherwise
 ignores the =SIGCHLD= signals it needs to function correctly
+Using =SomeException= catches all exceptions
 #+begin_src haskell
+buildConfig :: X Bool
+buildConfig =
+  io (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
+    Right ExitSuccess -> return True
+    Right (ExitFailure failCode) -> displayText (printf "Build failed with code %d" failCode) >> return False
+    Left exception -> displayText (displayException exception) >> return False
+
+
 restartConfig :: Bool -> X ()
 restartConfig resume = do
   uninstallSignalHandlers
-  io $ system "bin/build"
-  broadcastMessage ReleaseResources
-  io . flush =<< asks display
-  when resume writeStateToFile
-  origArgs <- io getArgs
-  catchIO (executeFile "bin/launch" True origArgs Nothing)
+  whenX buildConfig $ do
+    broadcastMessage ReleaseResources
+    io . flush =<< asks display
+    when resume writeStateToFile
+    origArgs <- io getArgs
+    catchIO (executeFile "bin/launch" True origArgs Nothing)
 #+end_src
 
 ** Main
