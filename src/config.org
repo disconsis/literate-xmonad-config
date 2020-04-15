@@ -120,7 +120,17 @@ myKeymap = flip mkKeymap myKeys
 myKeys = concat
   [ xmonadControlKeys
   , applicationKeys
+  , infoKeys
   ]
+#+end_src
+
+Some quick helper functions
+#+begin_src haskell
+namedKeyLaunch :: (String, String, String) -> (String, NamedAction)
+namedKeyLaunch (key, description, command) = (key, addName description $ spawn command)
+
+namedKeyMap :: String -> [(String, String, String)] -> (String, X ())
+namedKeyMap key items = (key, whichkeySubmap myConfig $ namedKeyLaunch <$> items)
 #+end_src
 
 *** Controlling XMonad
@@ -136,15 +146,26 @@ xmonadControlKeys =
 Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~, but it's faster to have some shortcuts for commonly used apps.
 #+name: opening-apps
 #+begin_src haskell
-applicationKeys = [ ("M-u", whichkeySubmap myConfig $ launch <$> apps) ]
+applicationKeys = return $ namedKeyMap "M-u" apps
   where
-    launch (key, description, command) = (key, addName description $ spawn command)
     apps = [ ("t"  , "Terminal"    , terminal myConfig)
            , ("e"  , "Emacs Client", "emacsclient -c")
            , ("S-e", "Emacs"       , "emacs")
            , ("f"  , "Firefox"     , "firefox")
            , ("r"  , "Ranger"      , "$TERMINAL ranger")
            , ("w"  , "WhatsApp"    , "whatsapp.sh")
+           ]
+#+end_src
+
+*** Info keys
+Keys for referring to information quickly - latex symbols, nerdfont icons etc.
+#+begin_src haskell
+infoKeys = return $ namedKeyMap "M-i" info
+  where
+    info = [ ("n"  , "Nerdfont reference"      , "nerdfont-dmenu.sh")
+           , ("l"  , "LaTeX symbol reference"  , "xdg-open http://detexify.kirelabs.org/classify.html")
+           , ("x m", "xmonad reference"        , "xdg-open https://hackage.haskell.org/package/xmonad")
+           , ("x c", "xmonad-contrib reference", "xdg-open https://hackage.haskell.org/package/xmonad-contrib")
            ]
 #+end_src
 
