@@ -8,7 +8,8 @@ Libraries for system IO actions
 import System.Process (system)
 import System.Posix.Process (executeFile)
 import System.Environment (getArgs)
-import System.Exit (exitSuccess)
+import System.Exit (exitSuccess, ExitCode(..))
+import Control.Exception
 #+end_src
 
 Some general libraries
@@ -38,6 +39,11 @@ import XMonad.Actions.Submap (submap)
 Change the cursor
 #+begin_src haskell
 import XMonad.Util.Cursor (setDefaultCursor, xC_left_ptr)
+#+end_src
+
+Easy formatting
+#+begin_src haskell
+import Text.Printf
 #+end_src
 
 * Which-key

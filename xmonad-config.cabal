@@ -32,3 +32,4 @@ executable xmonad
 
   default-extensions:
       FlexibleContexts
+    , LambdaCase
