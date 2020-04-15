@@ -1,6 +1,25 @@
 #+TITLE: disconsis' literate XMonad configuration
 #+AUTHOR: Ketan Kanishka (=disconsis=)
 #+PROPERTY: header-args :tangle "Main.hs"
+#+TODO: TODO IDEA | DONE
+
+* Ideas
+Ideas for improving this config are collected here.
+
+** IDEA Workspace-aware browser launcher
+Credit: [[https://github.com/altercation/dotfiles-tilingwm/blob/31e23a75eebdedbc4336e7826800586617d7d27d/.xmonad/xmonad.hs#L406][Ethan Schoonover]]
+I could configure the browser launcher to select particular profiles or tabs to start with - based on the workspace.
+Since most of my workspaces are generic, using workspace names to decide might be a good idea.
+This could be a significant gain.
+
+#+begin_example
+workspace name = "grading" --> tabs: <gradescope> <gmail/.jobs>
+workspace name = "config" --> tabs: <xmonad> ...
+#+end_example
+
+** TODO Add support for Polybar
+** TODO Translate some keys to Firefox shortcuts when it is open
+I've used this in a previous setup, and it works amazingly well.
 
 * Imports
 Libraries for system IO actions
