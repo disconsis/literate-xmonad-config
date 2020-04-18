@@ -24,8 +24,10 @@ I've used this in a previous setup, and it works amazingly well.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
-import System.Process (system)
+import System.Process (system, readProcess)
 import System.Posix.Process (executeFile)
+import System.Posix.Signals (signalProcess, sigKILL)
+import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess, ExitCode(..))
 import Control.Exception
@@ -68,26 +70,32 @@ import Text.Printf
 * Which-key
 The emacs =which-key= package is a great discovery tool. This is a feeble attempt at emulating it.
 
-We use =dzen= with some basic settings to display text on the screen
+We use =dzen= with some basic settings to display text on the screen. I would've liked to use =XMonad.Util.Dzen= for this,
+but it only contains =X= actions, while we only have access to =IO= in some situations.
 #+begin_src haskell
-displayText :: String -> X ()
-displayText text = dzenConfig (lineCount numLines >=> unCollapse >=> slaveAlign AlignCenter) text
+displayText :: MonadIO m => String -> m ()
+displayText text = io . void $ readProcess "dzen2" ["-p", "-l", show numLines, "-ta", "c", "-sa", "c", "-e", "onstart=uncollapse"] text
   where
     numLines = max 0 (length (lines text) - 1)          -- we only count slave lines, so everything after the first one
-    unCollapse = addArgs [ "-e", "onstart=uncollapse" ] -- we need to uncollapse at start, otherwise slave lines are only visible on mouseover
 #+end_src
 
-The original =which-key= activates after a delay whenever a keybind is partially completed. This would probably be quite hard to achieve in XMonad,
-although it's something I would eventually want. In the meantime, a useful compromise is to add a key (say, ~?~ aka ~S-/~) as an extra keybind in each submap.
+Like emacs' =which-key=, the help message activates after a delay and closes by itself if any key is pressed.
 Let's define a custom submap function for that. Unfortunately, the =NamedActions= module doesn't export =getAction :: NamedAction -> X ()=, which means we have to
-work around it using the functions it /does/ export. See [[opening-apps]] for a usage example.
+work around it using the functions it /does/ export. See [[opening-apps]] for a usage example. We add ~?~ (aka ~S-<slash>~) to display the help before the delay.
 *NOTE*: this will cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
 #+begin_src haskell
+whichkeyDelay = seconds 3
+whichkeyBind = (shiftMask, xK_slash)
+
 whichkeySubmap :: (LayoutClass l Window, Read (l Window)) => XConfig l -> [(String, NamedAction)] -> X ()
-whichkeySubmap config keybinds = submap $ keys config' config' { layoutHook = Layout (layoutHook config') }
+whichkeySubmap config keybinds = do
+  pid <- xfork (threadDelay whichkeyDelay >> displayText (toHelp keymap))
+  catchX (submap $ keys config' config' { layoutHook = Layout (layoutHook config') }) mempty
+  io $ signalProcess sigKILL pid
+  spawn "pkill dzen2"
   where
-    whichkeyBind = (shiftMask, xK_slash)
-    whichkeyAction = addName "Show this help" . displayText . unlines . showKm
+    toHelp = unlines . showKm
+    whichkeyAction = addName "Show this help" . io . displayText . toHelp
     keymap = mkNamedKeymap config keybinds
     config' = addDescrKeys' (whichkeyBind, whichkeyAction) (pure keymap) config
 #+end_src
@@ -208,7 +216,7 @@ Using =SomeException= catches all exceptions
 #+begin_src haskell
 buildConfig :: X Bool
 buildConfig =
-  io (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
+  io $ (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
     Right ExitSuccess -> return True
     Right (ExitFailure failCode) -> displayText (printf "Build failed with code %d" failCode) >> return False
     Left exception -> displayText (displayException exception) >> return False
