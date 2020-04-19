@@ -20,6 +20,9 @@ workspace name = "config" --> tabs: <xmonad> ...
 ** TODO Add support for Polybar
 ** TODO Translate some keys to Firefox shortcuts when it is open
 I've used this in a previous setup, and it works amazingly well.
+** TODO Use =Text= instead of =String=, and possibly a different Prelude like =Relude=
+Apparently =String= /really/ sucks. TIL a character takes *40 Bytes*, and that's just way too much.
+I'm finally convinced it's worth switching.
 
 * Imports
 Libraries for system IO actions
@@ -37,23 +40,28 @@ Some general libraries
 #+begin_src haskell
 import Control.Monad
 import qualified Data.Map as M
+import Data.List
+import Data.Bifunctor
 #+end_src
 
 Base =XMonad= import(s)
 #+begin_src haskell
-import XMonad
+import XMonad hiding (Color)
+#+end_src
+
+Some utilities from =xmonad-contrib=
+#+begin_src haskell
+import XMonad.Util.Run
 #+end_src
 
 =EZConfig= for emacs-style keybinding descriptions
 #+begin_src haskell
-import XMonad.Util.EZConfig (mkKeymap, checkKeymap, mkNamedKeymap)
+import XMonad.Util.EZConfig (mkKeymap, checkKeymap)
 #+end_src
 
 Libraries for =which-key= emulation
 #+begin_src haskell
-import XMonad.Util.Dzen
 import XMonad.Util.Font (Align(..))
-import XMonad.Util.NamedActions
 import XMonad.Actions.Submap (submap)
 #+end_src
 
@@ -67,47 +75,98 @@ Easy formatting
 import Text.Printf
 #+end_src
 
+* Markup(s)
+** Dzen
+Define interfaces for markup languages used later.
+
+First, dzen for the =which-key= popups.
+dzen has a lot more formatting options, like rectangles, xbm icons, and whatnot.
+Might be interesting to explore later.
+#+begin_src haskell
+type Color = String
+
+dzenFg, dzenBg :: Color -> String -> String
+dzenFg color string = printf "^fg(%s)%s^fg()" color string
+dzenBg color string = printf "^bg(%s)%s^bg()" color string
+#+end_src
+
 * Which-key
 The emacs =which-key= package is a great discovery tool. This is a feeble attempt at emulating it.
 
 We use =dzen= with some basic settings to display text on the screen. I would've liked to use =XMonad.Util.Dzen= for this,
 but it only contains =X= actions, while we only have access to =IO= in some situations.
 #+begin_src haskell
+displayTextFont = "Iosevka:pixelsize=15"
+
 displayText :: MonadIO m => String -> m ()
-displayText text = io . void $ readProcess "dzen2" ["-p", "-l", show numLines, "-ta", "c", "-sa", "c", "-e", "onstart=uncollapse"] text
+displayText text = io . void $ readProcess "dzen2"
+  [ "-p"
+  , "-l", show numLines
+  , "-ta", "c" , "-sa", "c"
+  , "-e", "onstart=uncollapse"                  -- show all lines at startup (by default they only show on mouse hover)
+  , "-fn", displayTextFont
+  ]
+  text
   where
-    numLines = max 0 (length (lines text) - 1)          -- we only count slave lines, so everything after the first one
+    numLines = max 0 (length (lines text) - 1)  -- we only count slave lines, so everything after the first one
 #+end_src
 
-Like emacs' =which-key=, the help message activates after a delay and closes by itself if any key is pressed.
-Let's define a custom submap function for that. Unfortunately, the =NamedActions= module doesn't export =getAction :: NamedAction -> X ()=, which means we have to
-work around it using the functions it /does/ export. See [[opening-apps]] for a usage example. We add ~?~ (aka ~S-<slash>~) to display the help before the delay.
-*NOTE*: this will cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
+We then need a pretty-printer for displaying the keybindings. The =NamedActions= module has functions for naming and printing keybindings, but unfortunately it's too restrictive and doesn't allow any customization. I realized that
+I don't require much of that functionality, and the provided pretty-printer is kind of ugly.
+Let's define our own the pretty-printer first.
+I'm using =equalizeLeft= and =equalizeRight= since we're using center-aligning in =dzen=, so the lines need to be of equal length to match up.
 #+begin_src haskell
-whichkeyDelay = seconds 3
-whichkeyBind = (shiftMask, xK_slash)
+data WhichkeyConfig
+  = WhichkeyConfig
+  { keyFg  :: Color     -- ^ foreground color for keys
+  , descFg :: Color     -- ^ foreground color for action descriptions
+  , delay  :: Rational  -- ^ delay (in seconds) after which whichkey pops up
+  }
 
-whichkeySubmap :: (LayoutClass l Window, Read (l Window)) => XConfig l -> [(String, NamedAction)] -> X ()
-whichkeySubmap config keybinds = do
-  pid <- xfork (threadDelay whichkeyDelay >> displayText (toHelp keymap))
-  catchX (submap $ keys config' config' { layoutHook = Layout (layoutHook config') }) mempty
+instance Default WhichkeyConfig where
+  def = WhichkeyConfig
+    { keyFg  = "orange"
+    , descFg = "light blue"
+    , delay  = 3
+    }
+
+whichkeyShowBindings :: WhichkeyConfig -> [(String, String, X ())] -> [String]
+whichkeyShowBindings whichkeyConf keybinds =
+  fmap (\(key, desc) -> printf "%s -> %s"
+   (dzenFg (keyFg whichkeyConf) key) (dzenFg (descFg whichkeyConf) desc)) $
+  uncurry zip $ bimap equalizeLeft equalizeRight $ unzip $ dropThd <$> keybinds
+  where
+    dropThd (a,b,c) = (a,b)
+
+    equalizeLeft strings =
+      let maxLen = maximum (length <$> strings) in
+      fmap (\string -> replicate (maxLen - length string) ' ' ++ string) strings
+
+    equalizeRight strings =
+      let maxLen = maximum (length <$> strings) in do
+      fmap (\string -> string ++ replicate (maxLen - length string) ' ') strings
+#+end_src
+
+Like emacs' =which-key=, the help message should activate after a delay and close by itself if any key is pressed.
+Let's define a custom submap function for that. For the reasons stated above, I'm using simple strings instead of the =NamedActions= module here.
+See [[opening-apps]] for a usage example.
+*NOTE*: this might cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
+#+begin_src haskell
+whichkeySubmap :: (LayoutClass l Window, Read (l Window))
+               => WhichkeyConfig
+               -> XConfig l
+               -> [(String, String, X ())]
+               -> X ()
+whichkeySubmap whichkeyConf config keybinds = do
+  pid <- xfork (threadDelay (seconds $ delay whichkeyConf) >> displayText (toHelp keybinds))
+  catchX (submap . mkKeymap config $ dropSnd <$> keybinds) mempty
   io $ signalProcess sigKILL pid
   spawn "pkill dzen2"
   where
-    toHelp = unlines . showKm
-    whichkeyAction = addName "Show this help" . io . displayText . toHelp
-    keymap = mkNamedKeymap config keybinds
-    config' = addDescrKeys' (whichkeyBind, whichkeyAction) (pure keymap) config
+    toHelp = unlines . whichkeyShowBindings whichkeyConf
+    dropSnd (a,b,c) = (a,c)
 #+end_src
 
-
-=showKm= isn't a great pretty-printer for the help, it would be nice to improve on this later.
-Things that could be improved on:
-1. =showKm= prints shift-masked characters as ~S-<char>~, but it's arguable clearer to display them as their capitalized versions (eg. ~S-/~ vs ~?~)
-2. Output is not columnar, since we're just centering every line and line lengths are not the same.
-3. =dzen= supports full pango markup, so it could prettified a lot more with colors and stuff.
-*************** TODO use a better pretty-printer than =showKm=.
-*************** END
 * Config
 #+begin_src haskell
 myConfig = def
@@ -153,11 +212,9 @@ myKeys = concat
 
 Some quick helper functions
 #+begin_src haskell
-namedKeyLaunch :: (String, String, String) -> (String, NamedAction)
-namedKeyLaunch (key, description, command) = (key, addName description $ spawn command)
-
-namedKeyMap :: String -> [(String, String, String)] -> (String, X ())
-namedKeyMap key items = (key, whichkeySubmap myConfig $ namedKeyLaunch <$> items)
+spawnKeymap :: String -> [(String, String, String)] -> (String, X ())
+spawnKeymap key items = (key, whichkeySubmap def myConfig $ mapThd spawn <$> items)
+  where mapThd f (a,b,c) = (a,b,f c)
 #+end_src
 
 *** Controlling XMonad
@@ -173,7 +230,7 @@ xmonadControlKeys =
 Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~, but it's faster to have some shortcuts for commonly used apps.
 #+name: opening-apps
 #+begin_src haskell
-applicationKeys = return $ namedKeyMap "M-u" apps
+applicationKeys = return $ spawnKeymap "M-u" apps
   where
     apps = [ ("t"  , "Terminal"    , terminal myConfig)
            , ("e"  , "Emacs Client", "emacsclient -c")
@@ -187,7 +244,7 @@ applicationKeys = return $ namedKeyMap "M-u" apps
 *** Info keys
 Keys for referring to information quickly - latex symbols, nerdfont icons etc.
 #+begin_src haskell
-infoKeys = return $ namedKeyMap "M-i" info
+infoKeys = return $ spawnKeymap "M-i" info
   where
     info = [ ("n"  , "Nerdfont reference"      , "nerdfont-dmenu.sh")
            , ("l"  , "LaTeX symbol reference"  , "xdg-open http://detexify.kirelabs.org/classify.html")
