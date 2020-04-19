@@ -23,6 +23,16 @@ I've used this in a previous setup, and it works amazingly well.
 ** TODO Use =Text= instead of =String=, and possibly a different Prelude like =Relude=
 Apparently =String= /really/ sucks. TIL a character takes *40 Bytes*, and that's just way too much.
 I'm finally convinced it's worth switching.
+** IDEA Convert this to a literate haskell file while maintaining org syntax
+Pros:
+- Provides editor support for haskell --> this is a /huge/ benefit
+- Can split up files, if required
+- No tangling required
+
+Cons:
+- Possibly removes editor support for org-mode
+- Doesn't allow source blocks for other languages
+- Have to add both org and literate-haskell markup for code blocks
 
 * Imports
 Libraries for system IO actions
