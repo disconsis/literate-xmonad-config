@@ -47,7 +47,7 @@ import System.Posix.Signals (signalProcess, sigKILL)
 import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
 import System.Exit (exitSuccess, ExitCode(..))
-import Control.Exception
+import Control.Exception (try, displayException, SomeException)
 #+end_src
 
 Some general libraries
@@ -105,9 +105,9 @@ import XMonad.Hooks.ManageDocks (docks, avoidStruts, AvoidStruts)
 #+end_src
 
 * Markup(s)
-** Dzen
 Define interfaces for markup languages used later.
 
+** Dzen
 First, dzen for the =which-key= popups.
 dzen has a lot more formatting options, like rectangles, xbm icons, and whatnot.
 Might be interesting to explore later.
@@ -117,6 +117,59 @@ type Color = String
 dzenFg, dzenBg :: Color -> String -> String
 dzenFg color string = printf "^fg(%s)%s^fg()" color string
 dzenBg color string = printf "^bg(%s)%s^bg()" color string
+#+end_src
+
+** Lemonbar
+Enumerate the mouse buttons. We'll use the =Enum= instance to use it in the markup, but
+since the default =Enum= instance starts counting from 0 and we want to start from 1, we'll have to add 1 to it.
+#+begin_src haskell
+data MouseButton
+  = LeftClick
+  | MiddleClick
+  | RightClick
+  | ScrollUp
+  | ScrollDown
+  | DoubleLeftClick
+  | DoubleMiddleClick
+  | DoubleRightClick
+  deriving (Eq, Ord, Show, Enum)
+
+fromMouseButton :: MouseButton -> Int
+fromMouseButton = succ . fromEnum
+#+end_src
+
+Then we define the formatting possibilities in lemonbar markup.
+#+begin_src haskell
+data LemonbarFormatting
+  = Foreground String
+  | Background String
+  | Reverse
+  | Underline String
+  | Overline String
+  | Font Int
+  | Offset Int
+  | Action MouseButton String
+  deriving (Eq, Show)
+#+end_src
+
+And finally convert these to markup using the [[https://github.com/LemonBoy/bar#formatting][lemonbar formatting spec]].
+#+begin_src haskell
+bracket :: String -> String
+bracket = wrap "%{" "}"
+
+lemonbarFormatOne :: LemonbarFormatting -> String -> String
+lemonbarFormatOne (Foreground color) = wrap (bracket $ "F" <> color) (bracket "F-")
+lemonbarFormatOne (Background color) = wrap (bracket $ "B" <> color) (bracket "B-")
+lemonbarFormatOne Reverse            = wrap (bracket "R") (bracket "R")
+lemonbarFormatOne (Underline color)  = wrap (bracket ("u" <> color) <> bracket "+u") (bracket "-u")
+lemonbarFormatOne (Overline color)   = wrap (bracket ("o" <> color) <> bracket "+o") (bracket "-o")
+lemonbarFormatOne (Font index)       = wrap (bracket "T" <> show index) (bracket "T-")
+lemonbarFormatOne (Offset size)      = (bracket ("O" <> show size) <>)
+lemonbarFormatOne (Action button command) =
+  wrap (bracket (printf "A%d:%s:" (fromMouseButton button) command)) (bracket "A")
+
+lemonbarFormat :: [LemonbarFormatting] -> String -> String
+lemonbarFormat fmts = foldr (.) id (lemonbarFormatOne <$> fmts)
 #+end_src
 
 * Which-key
