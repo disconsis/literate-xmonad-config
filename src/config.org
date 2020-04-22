@@ -17,7 +17,6 @@ workspace name = "grading" --> tabs: <gradescope> <gmail/.jobs>
 workspace name = "config" --> tabs: <xmonad> ...
 #+end_example
 
-** TODO Add support for Polybar
 ** TODO Translate some keys to Firefox shortcuts when it is open
 I've used this in a previous setup, and it works amazingly well.
 ** TODO Use =Text= instead of =String=, and possibly a different Prelude like =Relude=
@@ -39,8 +38,11 @@ Maybe auto-enable it when battery is below a threshold.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
+import System.IO
+import System.Posix.IO
+import System.Posix.Types (CPid(..))
 import System.Process (system, readProcess)
-import System.Posix.Process (executeFile)
+import System.Posix.Process (executeFile, getProcessID)
 import System.Posix.Signals (signalProcess, sigKILL)
 import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
@@ -54,6 +56,7 @@ import Control.Monad
 import qualified Data.Map as M
 import Data.List
 import Data.Bifunctor
+import Data.Maybe
 #+end_src
 
 Base =XMonad= import(s)
@@ -64,6 +67,7 @@ import XMonad hiding (Color)
 Some utilities from =xmonad-contrib=
 #+begin_src haskell
 import XMonad.Util.Run
+import XMonad.Layout.LayoutModifier (ModifiedLayout)
 #+end_src
 
 =EZConfig= for emacs-style keybinding descriptions
@@ -85,6 +89,19 @@ import XMonad.Util.Cursor (setDefaultCursor, xC_left_ptr)
 Easy formatting
 #+begin_src haskell
 import Text.Printf
+#+end_src
+
+Some helpers for output and parsing
+#+begin_src haskell
+import XMonad.Config.Dmwit (outputOf, splitColon)
+import Text.Read
+#+end_src
+
+Libraries for managing and logging to the status bar.
+#+begin_src haskell
+import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.DynamicBars
+import XMonad.Hooks.ManageDocks (docks, avoidStruts, AvoidStruts)
 #+end_src
 
 * Markup(s)
@@ -177,6 +194,71 @@ whichkeySubmap whichkeyConf config keybinds = do
   where
     toHelp = unlines . whichkeyShowBindings whichkeyConf
     dropSnd (a,b,c) = (a,c)
+#+end_src
+
+* Polybar
+[[https://github.com/polybar/polybar][Polybar]] is pretty cool. It has a lot of efficient modules for most things and is quite customizable.
+Aside from the actual choice of bar, there are things I want from a status bar:
+1. Show workspaces, Layout, extras etc. with nice highlighting
+2. Workspace indicators on the bar should focus that workspace on being clicked
+3. Different highlighting for bars on unfocused monitors
+4. On adding or removing a monitor, bars should be added or deleted automatically
+
+The first of these requirements is pretty standard, and can be achieved using some =lemonbar= markup that Polybar uses.
+The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
+The third and fourth can be achieved with =X.H.DynamicBars=.
+
+** Dynamic bar highlighting and management
+=DynamicBars= asks for a bar startup function of the type =ScreenId -> IO Handle=, where =ScreenId= is simply a newtype for =Int=.
+On the other hand, Polybar requires an xrandr monitor name to know which screen to use. So first we need a mapping between the two.
+I simply use =xrandr= to query which monitors are active and hope to dear god that they are in the same order as the =ScreenId='s.
+So far I have not been let down.
+#+begin_src haskell
+monitorIds :: IO [(ScreenId, String)]
+monitorIds = do
+  output <- outputOf "xrandr --listactivemonitors 2>/dev/null | awk '{print $1 $4}'"
+  return $ mapMaybe parseMonitor $ drop 1 $ lines output
+  where
+    parseMonitor :: String -> Maybe (ScreenId, String)
+    parseMonitor string = case splitColon string of
+      [a,b] ->
+        case readMaybe a of
+          Just a' -> Just (S a', b)
+          Nothing -> Nothing
+
+      _ -> Nothing
+#+end_src
+
+And finally the startup and cleanup functions for the bar.
+Here =polybar-start-monitor= is a simple shell script that starts polybar on the monitor provided as the argument and passes its
+standard input to it through a named pipe. We have to go through this intermediary since polybar doesn't read its stdin.
+#+begin_src haskell
+polybarStartup :: ScreenId -> IO Handle
+polybarStartup screenId = do
+  monitors <- monitorIds
+  case lookup screenId monitors of
+    Just monitor -> spawnPipe $ "polybar-start-monitor " <> monitor
+    Nothing -> error $ printf "No monitor found for %s in %s" (show screenId) (show monitors)
+
+polybarCleanup :: IO ()
+polybarCleanup = do
+  (CPid pid) <- getProcessID
+  spawn $ printf "pkill --parent %d 'polybar-start-monitor'" pid
+#+end_src
+
+And then plumb everything together with =DynamicBars= and =ManageDocks= (to actually make space for the bar).
+#+begin_src haskell
+polybarEnable :: LayoutClass l Window
+              => PP
+              -> PP
+              -> XConfig l
+              -> XConfig (ModifiedLayout AvoidStruts l)
+polybarEnable focusedPP unfocusedPP config  = docks $ config
+  { startupHook     = startupHook config     <+> dynStatusBarStartup polybarStartup polybarCleanup
+  , handleEventHook = handleEventHook config <+> dynStatusBarEventHook polybarStartup polybarCleanup
+  , logHook         = logHook config         <+> multiPP focusedPP unfocusedPP
+  , layoutHook      = avoidStruts $ layoutHook config
+  }
 #+end_src
 
 * Config
@@ -312,5 +394,7 @@ main = do
   args <- getArgs
   conf' @ XConfig { layoutHook = Layout l }
                   <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
-  launch $ conf' { layoutHook = l }
+  launch
+    $ polybarEnable def def
+    $ conf' { layoutHook = l }
 #+end_src
