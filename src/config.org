@@ -33,6 +33,8 @@ Cons:
 - Possibly removes editor support for org-mode
 - Doesn't allow source blocks for other languages
 - Have to add both org and literate-haskell markup for code blocks
+** IDEA Use =X.L.Stoppable= to develop a power-savings mode
+Maybe auto-enable it when battery is below a threshold.
 
 * Imports
 Libraries for system IO actions
