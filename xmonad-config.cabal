@@ -3,14 +3,14 @@ cabal-version: 1.12
 name:           xmonad-config
 version:        0.1.0.0
 description:    disconsis' xmonad config
-homepage:       https://github.com/disconsis/xmonad-config
-bug-reports:    https://github.com/disconsis/xmonad-config/issues
+homepage:       https://github.com/disconsis/literate-xmonad-config
+bug-reports:    https://github.com/disconsis/literate-xmonad-config/issues
 author:         Ketan Kanishka (disconsis)
 build-type:     Simple
 
 source-repository head
   type: git
-  location: https://github.com/disconsis/xmonad-config
+  location: https://github.com/disconsis/literate-xmonad-config
 
 executable xmonad
   default-language: Haskell2010
