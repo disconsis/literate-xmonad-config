@@ -1,0 +1,12 @@
+#+TITLE: A literate XMonad config
+
+** Features
+- WhichKey: show mappings after a delay if the keybinding is not complete
+
+** Installation & Testing
+- =make build=: To generate source files from the org config and build them.
+- =make test=: Test the config in a new window. This changes the =mod= key to Win instead of Alt.
+- =stack run=: Run XMonad
+
+** Config & Documentation
+See [[src/config.org]] for both!
