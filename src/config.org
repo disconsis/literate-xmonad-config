@@ -347,21 +347,32 @@ monitorIds = do
       _ -> Nothing
 #+end_src
 
+We want to use =spawnPipe= to start polybar and pass input to its stdin, but unfortunately polybar doesn't read from there.
+So we need to use an intermediary to pass it into polybar through a named pipe. We /could/ do this from xmonad itself, but then
+we have to maintain consistency between xmonad and polybar about the name of the pipe. That, and using named pipes in haskell
+turns out to have a lot of gotchas. We do this through a shell script =polybar-start-monitor.sh=
+
+The relevant polybar module just reads a the passed environment variable =STDINFIFO=
+#+begin_src conf :tangle no
+[module/stdin]
+type = custom/script
+tail = true
+exec = cat $STDINFIFO
+#+end_src
+
 And finally the startup and cleanup functions for the bar.
-Here =polybar-start-monitor= is a simple shell script that starts polybar on the monitor provided as the argument and passes its
-standard input to it through a named pipe. We have to go through this intermediary since polybar doesn't read its stdin.
 #+begin_src haskell
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
   monitors <- monitorIds
   case lookup screenId monitors of
-    Just monitor -> spawnPipe $ "polybar-start-monitor " <> monitor
+    Just monitor -> spawnPipe $ "bin/polybar-start-monitor.sh " <> monitor
     Nothing -> error $ printf "No monitor found for %s in %s" (show screenId) (show monitors)
 
 polybarCleanup :: IO ()
 polybarCleanup = do
   (CPid pid) <- getProcessID
-  spawn $ printf "pkill --parent %d 'polybar-start-monitor'" pid
+  spawn $ printf "pkill --parent %d bin/polybar-start-monitor.sh" pid
 #+end_src
 
 And then plumb everything together with =DynamicBars= and =ManageDocks= (to actually make space for the bar).
