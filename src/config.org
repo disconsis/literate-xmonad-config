@@ -229,9 +229,9 @@ data WhichkeyConfig
 
 instance Default WhichkeyConfig where
   def = WhichkeyConfig
-    { keyFg  = "orange"
-    , descFg = "light blue"
-    , delay  = 3
+    { keyFg  = onedarkBlue
+    , descFg = onedarkGreen
+    , delay  = 1.5
     }
 
 whichkeyShowBindings :: WhichkeyConfig -> [(String, String, X ())] -> [String]
