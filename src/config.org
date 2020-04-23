@@ -104,6 +104,11 @@ import XMonad.Hooks.DynamicBars
 import XMonad.Hooks.ManageDocks (docks, avoidStruts, AvoidStruts)
 #+end_src
 
+Libraries for pretty-printing to the status bar
+#+begin_src haskell
+import XMonad.Util.WorkspaceCompare (getSortByIndex)
+#+end_src
+
 * Markup(s)
 Define interfaces for markup languages used later.
 
@@ -170,6 +175,21 @@ lemonbarFormatOne (Action button command) =
 
 lemonbarFormat :: [LemonbarFormatting] -> String -> String
 lemonbarFormat fmts = foldr (.) id (lemonbarFormatOne <$> fmts)
+#+end_src
+
+* Colors
+** one-dark
+#+begin_src haskell
+onedarkBlack  = "#282c34"
+onedarkRed    = "#e06c75"
+onedarkGreen  = "#98c379"
+onedarkYellow = "#e5c07b"
+onedarkBlue   = "#61afef"
+onedarkPurple = "#c678dd"
+onedarkCyan   = "#56b6c2"
+onedarkGrey   = "#abb2bf"
+
+onedarkGreenDarker = "#68a349"
 #+end_src
 
 * Which-key
@@ -260,6 +280,51 @@ Aside from the actual choice of bar, there are things I want from a status bar:
 The first of these requirements is pretty standard, and can be achieved using some =lemonbar= markup that Polybar uses.
 The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
 The third and fourth can be achieved with =X.H.DynamicBars=.
+
+** Pretty-printing
+The basic pretty-printer which the upcoming ones should override.
+#+begin_src haskell
+basicPP :: PP
+basicPP = def
+  { ppSep = "  "
+  , ppWsSep = " "
+  , ppTitleSanitize = filter (`notElem` "%{}")
+  , ppOrder = layoutFirstOrder
+  , ppSort = getSortByIndex
+  , ppExtras = []
+  , ppOutput = const mempty
+  }
+  where
+    layoutFirstOrder (workspaces : layout : title : extras) =
+      [layout] ++ extras ++ [workspaces, title]
+    layoutFirstOrder other = other
+#+end_src
+
+And the chosen one is:
+#+begin_src haskell
+chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
+#+end_src
+
+*** one-dark
+#+begin_src haskell
+onedarkFocusedPP = basicPP
+  { ppCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ] . pad
+  , ppVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ] . pad
+  , ppVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ] . pad
+  , ppHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ] . pad
+  , ppHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ] . pad
+  , ppUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ] . pad
+  , ppTitle = lemonbarFormat [ Foreground onedarkGrey ] . shorten 50
+  , ppLayout = lemonbarFormat [ Foreground onedarkYellow ]
+  }
+
+onedarkUnfocusedPP = onedarkFocusedPP
+  { ppCurrent = fromJust $ ppVisibleNoWindows onedarkFocusedPP
+  , ppVisible = ppHiddenNoWindows onedarkFocusedPP
+  , ppVisibleNoWindows = Just $ ppHiddenNoWindows onedarkFocusedPP
+  , ppHidden = ppHiddenNoWindows onedarkFocusedPP
+  }
+#+end_src
 
 ** Dynamic bar highlighting and management
 =DynamicBars= asks for a bar startup function of the type =ScreenId -> IO Handle=, where =ScreenId= is simply a newtype for =Int=.
@@ -448,6 +513,6 @@ main = do
   conf' @ XConfig { layoutHook = Layout l }
                   <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
   launch
-    $ polybarEnable def def
+    $ uncurry polybarEnable chosenPP
     $ conf' { layoutHook = l }
 #+end_src
