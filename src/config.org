@@ -55,8 +55,10 @@ Some general libraries
 import Control.Monad
 import qualified Data.Map as M
 import Data.List
-import Data.Bifunctor
+import Data.Bifunctor (bimap)
 import Data.Maybe
+import Data.Char
+import Data.Tuple.Extra
 #+end_src
 
 Base =XMonad= import(s)
@@ -236,9 +238,19 @@ whichkeyShowBindings :: WhichkeyConfig -> [(String, String, X ())] -> [String]
 whichkeyShowBindings whichkeyConf keybinds =
   fmap (\(key, desc) -> printf "%s -> %s"
    (dzenFg (keyFg whichkeyConf) key) (dzenFg (descFg whichkeyConf) desc)) $
-  uncurry zip $ bimap equalizeLeft equalizeRight $ unzip $ dropThd <$> keybinds
+  uncurry zip $
+  bimap equalizeLeft equalizeRight $
+  unzip $
+  first capitalizeIfShift . dropThd <$> keybinds
   where
     dropThd (a,b,c) = (a,b)
+
+    capitalizeIfShift keystr = case reverse keystr of
+      (c : '-' : 'S' : rest) -> if isAlpha c then
+                                  reverse (rest ++ [toUpper c])
+                                else
+                                  keystr
+      _ -> keystr
 
     equalizeLeft strings =
       let maxLen = maximum (length <$> strings) in

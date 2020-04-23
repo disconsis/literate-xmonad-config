@@ -29,6 +29,7 @@ executable xmonad
     , containers
     , process
     , unix
+    , extra
 
   default-extensions:
       FlexibleContexts
