@@ -3,9 +3,7 @@
 #+PROPERTY: header-args :tangle "Main.hs"
 #+TODO: TODO IDEA | DONE
 
-* Ideas
-Ideas for improving this config are collected here.
-
+* Ideas & Fixes
 ** IDEA Workspace-aware browser launcher
 Credit: [[https://github.com/altercation/dotfiles-tilingwm/blob/31e23a75eebdedbc4336e7826800586617d7d27d/.xmonad/xmonad.hs#L406][Ethan Schoonover]]
 I could configure the browser launcher to select particular profiles or tabs to start with - based on the workspace.
@@ -34,6 +32,8 @@ Cons:
 - Have to add both org and literate-haskell markup for code blocks
 ** IDEA Use =X.L.Stoppable= to develop a power-savings mode
 Maybe auto-enable it when battery is below a threshold.
+** TODO =displayText= blocks forever. Make it fork and add an optional timer.
+** TODO Silence build notifications when testing.
 
 * Imports
 Libraries for system IO actions
