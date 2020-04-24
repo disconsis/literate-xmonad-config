@@ -32,7 +32,7 @@ Cons:
 - Have to add both org and literate-haskell markup for code blocks
 ** IDEA Use =X.L.Stoppable= to develop a power-savings mode
 Maybe auto-enable it when battery is below a threshold.
-** TODO =displayText= blocks forever. Make it fork and add an optional timer.
+** TODO =restartConfig='s displays a blank dzen when build fails
 
 * Imports
 Libraries for system IO actions
@@ -201,17 +201,28 @@ but it only contains =X= actions, while we only have access to =IO= in some situ
 #+begin_src haskell
 displayTextFont = "Iosevka:pixelsize=15"
 
-displayText :: MonadIO m => String -> m ()
-displayText text = io . void $ readProcess "dzen2"
-  [ "-p"
-  , "-l", show numLines
-  , "-ta", "c" , "-sa", "c"
-  , "-e", "onstart=uncollapse"                  -- show all lines at startup (by default they only show on mouse hover)
-  , "-fn", displayTextFont
-  ]
+displayTextSync :: MonadIO m => Maybe Rational -> String -> m ()
+displayTextSync time text = io . void $ readProcess "dzen2"
+  (("-p" : timeArg) ++
+   [ "-l", show numLines
+   , "-ta", "c" , "-sa", "c"
+   , "-e", "onstart=uncollapse"                  -- show all lines at startup (by default they only show on mouse hover)
+   , "-fn", displayTextFont
+   ])
   text
   where
     numLines = max 0 (length (lines text) - 1)  -- we only count slave lines, so everything after the first one
+    timeArg = maybeToList $ show . seconds <$> time
+
+displayText time text = void $ xfork $ displayTextSync time text
+
+displayTextSyncTill, displayTextTill :: MonadIO m => Rational -> String -> m ()
+displayTextSyncTill = displayTextSync . Just
+displayTextTill = displayText . Just
+
+displayTextSyncForever, displayTextForever :: MonadIO m => String -> m ()
+displayTextSyncForever = displayTextSync Nothing
+displayTextForever = displayText Nothing
 #+end_src
 
 We then need a pretty-printer for displaying the keybindings. The =NamedActions= module has functions for naming and printing keybindings, but unfortunately it's too restrictive and doesn't allow any customization. I realized that
@@ -271,7 +282,7 @@ whichkeySubmap :: (LayoutClass l Window, Read (l Window))
                -> [(String, String, X ())]
                -> X ()
 whichkeySubmap whichkeyConf config keybinds = do
-  pid <- xfork (threadDelay (seconds $ delay whichkeyConf) >> displayText (toHelp keybinds))
+  pid <- xfork (threadDelay (seconds $ delay whichkeyConf) >> displayTextSyncForever (toHelp keybinds))
   catchX (submap . mkKeymap config $ dropSnd <$> keybinds) mempty
   io $ signalProcess sigKILL pid
   spawn "pkill dzen2"
@@ -509,9 +520,10 @@ buildConfig :: X Bool
 buildConfig =
   io $ (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
     Right ExitSuccess -> return True
-    Right (ExitFailure failCode) -> displayText (printf "Build failed with code %d" failCode) >> return False
-    Left exception -> displayText (displayException exception) >> return False
-
+    Right (ExitFailure failCode) -> displayTextTill errTime (printf "Build failed with code: %d" failCode) >> return False
+    Left exception -> displayTextTill errTime ("Build failed with exception: " <> displayException exception) >> return False
+  where
+    errTime = 5
 
 restartConfig :: Bool -> X ()
 restartConfig resume = do
