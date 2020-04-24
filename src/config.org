@@ -33,7 +33,6 @@ Cons:
 ** IDEA Use =X.L.Stoppable= to develop a power-savings mode
 Maybe auto-enable it when battery is below a threshold.
 ** TODO =displayText= blocks forever. Make it fork and add an optional timer.
-** TODO Silence build notifications when testing.
 
 * Imports
 Libraries for system IO actions

@@ -2,7 +2,7 @@
 
 
 build: src/config.org xmonad-config.cabal
-				bin/build
+				bin/build --quiet
 
 test:
 				make build

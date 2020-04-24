@@ -1,6 +1,16 @@
 #!/usr/bin/env sh
 
-notify-send "XMonad" "Building XMonad"
+# handle arguments
+QUIET=false
+
+if [ "$1" = "--quiet" ] || [ "$1" = "-q" ]; then
+    QUIET=true
+fi
+
+function notify() {
+    [ "$QUIET" = false ] && notify-send "$@"
+}
+
 
 # tangle the org file -- `ntangle` is much faster than the elisp implementation
 # see [[https://github.com/OrgTangle/ntangle]]
@@ -10,8 +20,9 @@ stack build
 status=$?
 
 if [[ $status -ne 0 ]]; then
-    notify-send --urgency=critical "XMonad" "Building failed!"
-    exit $status
+    notify --urgency=critical "XMonad" "Building failed!"
 else
-    notify-send "XMonad" "Build successful"
+    notify "XMonad" "Build successful"
 fi
+
+exit $status
