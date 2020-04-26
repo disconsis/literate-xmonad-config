@@ -367,7 +367,11 @@ Aside from the actual choice of bar, there are things I want from a status bar:
 4. On adding or removing a monitor, bars should be added or deleted automatically
 
 The first of these requirements is pretty standard, and can be achieved using some =lemonbar= markup that Polybar uses.
+
 The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
+The other option is to use =X.H.ServerMode= which allows us to call arbitrary actions from the bar, like changing the layout.
+This is slightly more complicated, but should be worth it for the extensibility.
+
 The third and fourth can be achieved with =X.H.DynamicBars=.
 
 ** Pretty-printing
