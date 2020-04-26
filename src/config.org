@@ -554,6 +554,7 @@ myConfig = def
   , modMask         = myModMask
   , handleExtraArgs = handleTestConditions
   , keys            = myKeymap
+  , mouseBindings   = myMouseBindings
   , startupHook     = myStartupHook
   }
 #+end_src
@@ -632,6 +633,13 @@ infoKeys = return $ spawnKeymap "M-i" info
            , ("x m", "xmonad reference"        , "xdg-open https://hackage.haskell.org/package/xmonad")
            , ("x c", "xmonad-contrib reference", "xdg-open https://hackage.haskell.org/package/xmonad-contrib")
            ]
+#+end_src
+
+** Mouse bindings
+Let's keep this empty for now. The default behaviour of making windows floating when dragged around is really irritating.
+#+begin_src haskell
+myMouseBindings :: XConfig Layout -> Map (ButtonMask, Button) (Window -> X ())
+myMouseBindings config = fromList []
 #+end_src
 
 ** Startup actions
