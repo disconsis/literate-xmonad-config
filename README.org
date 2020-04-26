@@ -1,7 +1,8 @@
 #+TITLE: A literate XMonad config
 
 ** Features
-- WhichKey: show mappings after a delay if the keybinding is not complete
+- WhichKey: then show completions after a delay if the keybinding is not complete
+- Polybar: Open, manage, and pretty-print  a highly-capable status bar
 
 ** Installation & Testing
 - =make build=: To generate source files from the org config and build them.

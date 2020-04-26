@@ -234,6 +234,39 @@ onedarkGreenDarker = "#68a349"
 * Which-key
 The emacs =which-key= package is a great discovery tool. This is a feeble attempt at emulating it.
 
+The =NamedActions= module already provides some of this functionality, but it shows /all/ the keybindings at once.
+=which-key='s approach to this is to only show keybindings which have partially been completed.
+
+As an example, let this be your config:
+#+begin_example
+[ ("C-u f", "use foo")
+, ("C-u m", "use moo")
+, ("C-u x", "use xoo")
+, ("C-u r", "use roo")
+
+, ("C-g f", "goto foo")
+, ("C-g m", "goto moo")
+, ("C-g x", "goto xoo")
+, ("C-g r", "goto roo")
+
+, ("C-i f", "info foo")
+, ("C-i m", "info moo")
+, ("C-i x", "info xoo")
+, ("C-i r", "info roo")
+]
+#+end_example
+
+=NamedActions= would provide a help bindings (such as "F1") that you could hit to see all of these at once.
+In contrast, this implementation of =which-key= does not provide a help binding, but you could hit ~C-i~ (say) and the help for keys which /complete/ C-i bindings would pop up after a delay (say, 2 seconds).
+That would look like this:
+#+begin_example
+f -> info foo
+m -> info moo
+x -> info xoo
+r -> info roo
+#+end_example
+I find this a lot better for discoverability, as seeing all bindings at once is a bit overwhelming.
+
 We use =dzen= with some basic settings to display text on the screen. I would've liked to use =XMonad.Util.Dzen= for this,
 but it only contains =X= actions, while we only have access to =IO= in some situations.
 #+begin_src haskell
