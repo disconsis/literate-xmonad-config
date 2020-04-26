@@ -17,9 +17,6 @@ workspace name = "config" --> tabs: <xmonad> ...
 
 ** TODO Translate some keys to Firefox shortcuts when it is open
 I've used this in a previous setup, and it works amazingly well.
-** TODO Use =Text= instead of =String=, and possibly a different Prelude like =Relude=
-Apparently =String= /really/ sucks. TIL a character takes *40 Bytes*, and that's just way too much.
-I'm finally convinced it's worth switching.
 ** IDEA Convert this to a literate haskell file while maintaining org syntax
 Pros:
 - Provides editor support for haskell --> this is a /huge/ benefit
