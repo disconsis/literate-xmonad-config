@@ -37,7 +37,6 @@ Maybe auto-enable it when battery is below a threshold.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
-import System.IO
 import System.Posix.IO
 import System.Posix.Types (CPid(..))
 import System.Process (system, readProcess)
@@ -45,19 +44,27 @@ import System.Posix.Process (executeFile, getProcessID)
 import System.Posix.Signals (signalProcess, sigKILL)
 import Control.Concurrent (threadDelay)
 import System.Environment (getArgs)
-import System.Exit (exitSuccess, ExitCode(..))
+import System.Exit (ExitCode(..))
 import Control.Exception (try, displayException, SomeException)
 #+end_src
 
 Some general libraries
 #+begin_src haskell
-import Control.Monad
-import qualified Data.Map as M
-import Data.List
-import Data.Bifunctor (bimap)
-import Data.Maybe
+import Relude as R
+import Relude.Extra.Foldable1
+import Relude.Extra.Tuple
+import Relude.Extra.Bifunctor
+import qualified Relude.Unsafe as Unsafe
+import qualified Prelude as P
 import Data.Char
-import Data.Tuple.Extra
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import Data.Function
+#+end_src
+
+Reverse application functions
+#+begin_src haskell
+import Flow
 #+end_src
 
 Base =XMonad= import(s)
@@ -90,17 +97,19 @@ import XMonad.Util.Cursor (setDefaultCursor, xC_left_ptr)
 Easy formatting
 #+begin_src haskell
 import Text.Printf
+import Data.Text.Format (Only(..))
+import qualified Data.Text.Format as F
 #+end_src
 
 Some helpers for output and parsing
 #+begin_src haskell
-import XMonad.Config.Dmwit (outputOf, splitColon)
+import XMonad.Config.Dmwit (outputOf)
 import Text.Read
 #+end_src
 
 Libraries for managing and logging to the status bar.
 #+begin_src haskell
-import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.DynamicLog (PP(..))
 import XMonad.Hooks.DynamicBars
 import XMonad.Hooks.ManageDocks (docks, avoidStruts, AvoidStruts)
 #+end_src
@@ -110,6 +119,32 @@ Libraries for pretty-printing to the status bar
 import XMonad.Util.WorkspaceCompare (getSortByIndex)
 #+end_src
 
+* Utils
+Some utility functions to make life easy
+#+begin_src haskell
+-- markup & logging
+wrap :: Text -> Text -> Text -> Text
+wrap left right middle = left <> middle <> right
+
+pad :: Text -> Text
+pad = wrap " " " "
+
+shorten :: Int -> Text -> Text
+shorten maxlen text = T.snoc (T.take maxlen text) ellipsis
+  where ellipsis = '…'
+
+format fmt = TL.toStrict . F.format fmt
+format1 str item = format str (Only item)
+
+-- three-tuples
+mapThd3 f (a,b,c) = (a,b, f c)
+dropSnd3 (a,b,c) = (a,c)
+dropThd3 (a,b,c) = (a,b)
+
+-- reverse function application
+infixl 0 |>>
+x |>> f = x |> fmap f
+#+end_src
 * Markup(s)
 Define interfaces for markup languages used later.
 
@@ -118,11 +153,11 @@ First, dzen for the =which-key= popups.
 dzen has a lot more formatting options, like rectangles, xbm icons, and whatnot.
 Might be interesting to explore later.
 #+begin_src haskell
-type Color = String
+type Color = Text
 
-dzenFg, dzenBg :: Color -> String -> String
-dzenFg color string = printf "^fg(%s)%s^fg()" color string
-dzenBg color string = printf "^bg(%s)%s^bg()" color string
+dzenFg, dzenBg :: Color -> Text -> Text
+dzenFg color string = format "^fg({}){}^fg()" (color, string)
+dzenBg color string = format "^bg({}){}^bg()" (color, string)
 #+end_src
 
 ** Lemonbar
@@ -147,34 +182,33 @@ fromMouseButton = succ . fromEnum
 Then we define the formatting possibilities in lemonbar markup.
 #+begin_src haskell
 data LemonbarFormatting
-  = Foreground String
-  | Background String
+  = Foreground Color
+  | Background Color
   | Reverse
-  | Underline String
-  | Overline String
+  | Underline Color
+  | Overline Color
   | Font Int
   | Offset Int
-  | Action MouseButton String
+  | Action MouseButton Text
   deriving (Eq, Show)
 #+end_src
 
 And finally convert these to markup using the [[https://github.com/LemonBoy/bar#formatting][lemonbar formatting spec]].
 #+begin_src haskell
-bracket :: String -> String
-bracket = wrap "%{" "}"
+lemonbarFormatOne :: LemonbarFormatting -> Text -> Text
+lemonbarFormatOne fmt = case fmt of
+  (Foreground color)      -> wrap (bracket $ format1 "F{}" color) (bracket "F-")
+  (Background color)      -> wrap (bracket $ format1 "B{}" color) (bracket "B-")
+  (Reverse)               -> wrap (bracket "R") (bracket "R")
+  (Underline color)       -> wrap (bracket (format1 "u{}" color) <> bracket "+u") (bracket "-u")
+  (Overline color)        -> wrap (bracket (format1 "o{}" color) <> bracket "+o") (bracket "-o")
+  (Font index)            -> wrap (bracket (format1 "T{}" index)) (bracket "T-")
+  (Offset size)           -> (bracket (format1 "O{}" size) <>)
+  (Action button command) -> wrap (bracket (format "A{}:{}:" (fromMouseButton button, command))) (bracket "A")
+  where
+    bracket = wrap "%{" "}"
 
-lemonbarFormatOne :: LemonbarFormatting -> String -> String
-lemonbarFormatOne (Foreground color) = wrap (bracket $ "F" <> color) (bracket "F-")
-lemonbarFormatOne (Background color) = wrap (bracket $ "B" <> color) (bracket "B-")
-lemonbarFormatOne Reverse            = wrap (bracket "R") (bracket "R")
-lemonbarFormatOne (Underline color)  = wrap (bracket ("u" <> color) <> bracket "+u") (bracket "-u")
-lemonbarFormatOne (Overline color)   = wrap (bracket ("o" <> color) <> bracket "+o") (bracket "-o")
-lemonbarFormatOne (Font index)       = wrap (bracket "T" <> show index) (bracket "T-")
-lemonbarFormatOne (Offset size)      = (bracket ("O" <> show size) <>)
-lemonbarFormatOne (Action button command) =
-  wrap (bracket (printf "A%d:%s:" (fromMouseButton button) command)) (bracket "A")
-
-lemonbarFormat :: [LemonbarFormatting] -> String -> String
+lemonbarFormat :: [LemonbarFormatting] -> Text -> Text
 lemonbarFormat fmts = foldr (.) id (lemonbarFormatOne <$> fmts)
 #+end_src
 
@@ -201,7 +235,7 @@ but it only contains =X= actions, while we only have access to =IO= in some situ
 #+begin_src haskell
 displayTextFont = "Iosevka:pixelsize=15"
 
-displayTextSync :: MonadIO m => Maybe Rational -> String -> m ()
+displayTextSync :: MonadIO m => Maybe Rational -> Text -> m ()
 displayTextSync time text = io . void $ readProcess "dzen2"
   (("-p" : timeArg) ++
    [ "-l", show numLines
@@ -209,18 +243,18 @@ displayTextSync time text = io . void $ readProcess "dzen2"
    , "-e", "onstart=uncollapse"                  -- show all lines at startup (by default they only show on mouse hover)
    , "-fn", displayTextFont
    ])
-  text
+  (toString text)
   where
     numLines = max 0 (length (lines text) - 1)  -- we only count slave lines, so everything after the first one
     timeArg = maybeToList $ show . seconds <$> time
 
 displayText time text = void $ xfork $ displayTextSync time text
 
-displayTextSyncTill, displayTextTill :: MonadIO m => Rational -> String -> m ()
+displayTextSyncTill, displayTextTill :: MonadIO m => Rational -> Text -> m ()
 displayTextSyncTill = displayTextSync . Just
 displayTextTill = displayText . Just
 
-displayTextSyncForever, displayTextForever :: MonadIO m => String -> m ()
+displayTextSyncForever, displayTextForever :: MonadIO m => Text -> m ()
 displayTextSyncForever = displayTextSync Nothing
 displayTextForever = displayText Nothing
 #+end_src
@@ -244,31 +278,31 @@ instance Default WhichkeyConfig where
     , delay  = 1.5
     }
 
-whichkeyShowBindings :: WhichkeyConfig -> [(String, String, X ())] -> [String]
-whichkeyShowBindings whichkeyConf keybinds =
-  fmap (\(key, desc) -> printf "%s -> %s"
-   (dzenFg (keyFg whichkeyConf) key) (dzenFg (descFg whichkeyConf) desc)) $
-  uncurry zip $
-  bimap equalizeLeft equalizeRight $
-  unzip $
-  first capitalizeIfShift . dropThd <$> keybinds
+whichkeyShowBindings :: WhichkeyConfig -> [(Text, Text, X ())] -> [Text]
+whichkeyShowBindings WhichkeyConfig{keyFg, descFg} keybinds =
+  keybinds
+  |>> dropThd3
+  |>> first capitalizeIfShift
+  |> unzip
+  |> bimap equalizeLeft equalizeRight
+  |> uncurry zip
+  |>> bimap (dzenFg keyFg) (dzenFg descFg)
+  |>> format "{} -> {}"
   where
-    dropThd (a,b,c) = (a,b)
+    capitalizeIfShift keystr
+      | "S-" `T.isPrefixOf` last3 = T.snoc (T.dropEnd 3 keystr) (toUpper lastChar)
+      | otherwise = keystr
+      where
+        last3 = T.takeEnd 3 keystr
+        lastChar = T.last last3
 
-    capitalizeIfShift keystr = case reverse keystr of
-      (c : '-' : 'S' : rest) -> if isAlpha c then
-                                  reverse (rest ++ [toUpper c])
-                                else
-                                  keystr
-      _ -> keystr
+    equalizeLeft keys =
+      let maxLen = maximum1 (T.length <$> T.empty :| keys) in
+      T.justifyRight maxLen ' ' <$> keys
 
-    equalizeLeft strings =
-      let maxLen = maximum (length <$> strings) in
-      fmap (\string -> replicate (maxLen - length string) ' ' ++ string) strings
-
-    equalizeRight strings =
-      let maxLen = maximum (length <$> strings) in do
-      fmap (\string -> string ++ replicate (maxLen - length string) ' ') strings
+    equalizeRight descriptions =
+      let maxLen = maximum1 (T.length <$> T.empty :| descriptions) in
+      T.justifyLeft maxLen ' ' <$> descriptions
 #+end_src
 
 Like emacs' =which-key=, the help message should activate after a delay and close by itself if any key is pressed.
@@ -279,16 +313,15 @@ See [[opening-apps]] for a usage example.
 whichkeySubmap :: (LayoutClass l Window, Read (l Window))
                => WhichkeyConfig
                -> XConfig l
-               -> [(String, String, X ())]
+               -> [(Text, Text, X ())]
                -> X ()
 whichkeySubmap whichkeyConf config keybinds = do
   pid <- xfork (threadDelay (seconds $ delay whichkeyConf) >> displayTextSyncForever (toHelp keybinds))
-  catchX (submap . mkKeymap config $ dropSnd <$> keybinds) mempty
+  catchX (submap . mkKeymap config $ first toString . dropSnd3 <$> keybinds) mempty
   io $ signalProcess sigKILL pid
   spawn "pkill dzen2"
   where
     toHelp = unlines . whichkeyShowBindings whichkeyConf
-    dropSnd (a,b,c) = (a,c)
 #+end_src
 
 * Polybar
@@ -304,17 +337,84 @@ The second can be achieved with =xdotool set_desktop <workspace>=. This requires
 The third and fourth can be achieved with =X.H.DynamicBars=.
 
 ** Pretty-printing
+First, some code to switch between text and string
+#+begin_src haskell
+type WorkspaceIdT = Text
+
+data PPText = PPText
+  { pptCurrent :: WorkspaceIdT -> Text
+  , pptVisible :: WorkspaceIdT -> Text
+  , pptHidden  :: WorkspaceIdT -> Text
+  , pptHiddenNoWindows :: WorkspaceIdT -> Text
+  , pptVisibleNoWindows :: Maybe (WorkspaceIdT -> Text)
+  , pptUrgent :: WorkspaceIdT -> Text
+  , pptSep :: Text
+  , pptWsSep :: Text
+  , pptTitle :: Text -> Text
+  , pptTitleSanitize :: Text -> Text
+  , pptLayout :: Text -> Text
+  , pptOrder :: [String] -> [String]
+  , pptSort :: X ([WindowSpace] -> [WindowSpace])
+  , pptExtras :: [X (Maybe Text)]
+  , pptOutput :: Text -> IO ()
+  }
+
+ppTextToString :: PPText -> PP
+ppTextToString ppt = PP
+  { ppCurrent = convert $ pptCurrent ppt
+  , ppVisible = convert $ pptVisible ppt
+  , ppHidden  = convert $ pptHidden ppt
+  , ppHiddenNoWindows = convert $ pptHiddenNoWindows ppt
+  , ppVisibleNoWindows = convert <$> pptVisibleNoWindows ppt
+  , ppUrgent = convert $ pptUrgent ppt
+  , ppSep = toString $ pptSep ppt
+  , ppWsSep = toString $ pptWsSep ppt
+  , ppTitle = convert $ pptTitle ppt
+  , ppTitleSanitize = convert $ pptTitleSanitize ppt
+  , ppLayout = convert $ pptLayout ppt
+  , ppOrder = pptOrder ppt
+  , ppSort = pptSort ppt
+  , ppExtras = (fmap . fmap . fmap) toString $ pptExtras ppt
+  , ppOutput = pptOutput ppt . toText
+  }
+  where convert f = toString . f . toText
+
+ppStringToText :: PP -> PPText
+ppStringToText pp = PPText
+  { pptCurrent = convert $ ppCurrent pp
+  , pptVisible = convert $ ppVisible pp
+  , pptHidden  = convert $ ppHidden pp
+  , pptHiddenNoWindows = convert $ ppHiddenNoWindows pp
+  , pptVisibleNoWindows = convert <$> ppVisibleNoWindows pp
+  , pptUrgent = convert $ ppUrgent pp
+  , pptSep = toText $ ppSep pp
+  , pptWsSep = toText $ ppWsSep pp
+  , pptTitle = convert $ ppTitle pp
+  , pptTitleSanitize = convert $ ppTitleSanitize pp
+  , pptLayout = convert $ ppLayout pp
+  , pptOrder = ppOrder pp
+  , pptSort = ppSort pp
+  , pptExtras = (fmap . fmap . fmap) toText $ ppExtras pp
+  , pptOutput = ppOutput pp . toString
+  }
+  where convert f = toText . f . toString
+
+
+instance Default PPText where
+  def = ppStringToText def
+#+end_src
+
 The basic pretty-printer which the upcoming ones should override.
 #+begin_src haskell
-basicPP :: PP
+basicPP :: PPText
 basicPP = def
-  { ppSep = "  "
-  , ppWsSep = " "
-  , ppTitleSanitize = filter (`notElem` "%{}")
-  , ppOrder = layoutFirstOrder
-  , ppSort = getSortByIndex
-  , ppExtras = []
-  , ppOutput = const mempty
+  { pptSep = "  "
+  , pptWsSep = " "
+  , pptTitleSanitize = T.filter (`notElem` ['%','{','}'])
+  , pptOrder = layoutFirstOrder
+  , pptSort = getSortByIndex
+  , pptExtras = []
+  , pptOutput = const mempty
   }
   where
     layoutFirstOrder (workspaces : layout : title : extras) =
@@ -322,29 +422,32 @@ basicPP = def
     layoutFirstOrder other = other
 #+end_src
 
-And the chosen one is:
+This is the one that finally gets applied.
 #+begin_src haskell
+chosenPP :: (PPText, PPText)
 chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
 #+end_src
 
 *** one-dark
 #+begin_src haskell
+onedarkFocusedPP :: PPText
 onedarkFocusedPP = basicPP
-  { ppCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ] . pad
-  , ppVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ] . pad
-  , ppVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ] . pad
-  , ppHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ] . pad
-  , ppHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ] . pad
-  , ppUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ] . pad
-  , ppTitle = lemonbarFormat [ Foreground onedarkGrey ] . shorten 50
-  , ppLayout = lemonbarFormat [ Foreground onedarkYellow ]
+  { pptCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ] . pad
+  , pptVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ] . pad
+  , pptVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ] . pad
+  , pptHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ] . pad
+  , pptHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ] . pad
+  , pptUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ] . pad
+  , pptTitle = lemonbarFormat [ Foreground onedarkGrey ] . shorten 50
+  , pptLayout = lemonbarFormat [ Foreground onedarkYellow ]
   }
 
+onedarkUnfocusedPP :: PPText
 onedarkUnfocusedPP = onedarkFocusedPP
-  { ppCurrent = fromJust $ ppVisibleNoWindows onedarkFocusedPP
-  , ppVisible = ppHiddenNoWindows onedarkFocusedPP
-  , ppVisibleNoWindows = Just $ ppHiddenNoWindows onedarkFocusedPP
-  , ppHidden = ppHiddenNoWindows onedarkFocusedPP
+  { pptCurrent = Unsafe.fromJust $ pptVisibleNoWindows onedarkFocusedPP
+  , pptVisible = pptHiddenNoWindows onedarkFocusedPP
+  , pptVisibleNoWindows = Just $ pptHiddenNoWindows onedarkFocusedPP
+  , pptHidden = pptHiddenNoWindows onedarkFocusedPP
   }
 #+end_src
 
@@ -354,19 +457,17 @@ On the other hand, Polybar requires an xrandr monitor name to know which screen 
 I simply use =xrandr= to query which monitors are active and hope to dear god that they are in the same order as the =ScreenId='s.
 So far I have not been let down.
 #+begin_src haskell
-monitorIds :: IO [(ScreenId, String)]
+monitorIds :: IO [(ScreenId, Text)]
 monitorIds = do
-  output <- outputOf "xrandr --listactivemonitors 2>/dev/null | awk '{print $1 $4}'"
-  return $ mapMaybe parseMonitor $ drop 1 $ lines output
+  output <- toText <$> outputOf "xrandr --listactivemonitors 2>/dev/null | awk '{print $1 $4}'"
+  return $ mapMaybe parseMonitor . drop 1 $ lines output
   where
-    parseMonitor :: String -> Maybe (ScreenId, String)
-    parseMonitor string = case splitColon string of
-      [a,b] ->
-        case readMaybe a of
-          Just a' -> Just (S a', b)
-          Nothing -> Nothing
-
-      _ -> Nothing
+    parseMonitor :: Text -> Maybe (ScreenId, Text)
+    parseMonitor text = do
+      let (idText, monitorText) = T.breakOn ":" text
+      monitor <- T.stripPrefix ":" monitorText
+      id <- readMaybe . toString $ idText
+      return (S id, monitor)
 #+end_src
 
 We want to use =spawnPipe= to start polybar and pass input to its stdin, but unfortunately polybar doesn't read from there.
@@ -387,9 +488,9 @@ And finally the startup and cleanup functions for the bar.
 polybarStartup :: ScreenId -> IO Handle
 polybarStartup screenId = do
   monitors <- monitorIds
-  case lookup screenId monitors of
-    Just monitor -> spawnPipe $ "bin/polybar-start-monitor.sh " <> monitor
-    Nothing -> error $ printf "No monitor found for %s in %s" (show screenId) (show monitors)
+  case P.lookup screenId monitors of
+    Just monitor -> spawnPipe . toString $ format1 "bin/polybar-start-monitor.sh {}" monitor
+    Nothing -> error $ format "No monitor found for {} in {}" (P.show screenId, P.show monitors)
 
 polybarCleanup :: IO ()
 polybarCleanup = do
@@ -404,11 +505,11 @@ polybarEnable :: LayoutClass l Window
               -> PP
               -> XConfig l
               -> XConfig (ModifiedLayout AvoidStruts l)
-polybarEnable focusedPP unfocusedPP config  = docks $ config
-  { startupHook     = startupHook config     <+> dynStatusBarStartup polybarStartup polybarCleanup
-  , handleEventHook = handleEventHook config <+> dynStatusBarEventHook polybarStartup polybarCleanup
-  , logHook         = logHook config         <+> multiPP focusedPP unfocusedPP
-  , layoutHook      = avoidStruts $ layoutHook config
+polybarEnable focusedPP unfocusedPP config@XConfig{..}  = docks $ config
+  { startupHook     = startupHook      <+> dynStatusBarStartup polybarStartup polybarCleanup
+  , handleEventHook = handleEventHook  <+> dynStatusBarEventHook polybarStartup polybarCleanup
+  , logHook         = logHook          <+> multiPP focusedPP unfocusedPP
+  , layoutHook      = avoidStruts $ layoutHook
   }
 #+end_src
 
@@ -448,6 +549,8 @@ handleTestConditions args config = case args of
 ** Keys
 #+begin_src haskell
 myKeymap = flip mkKeymap myKeys
+
+myKeys :: [(String, X ())]
 myKeys = concat
   [ xmonadControlKeys
   , applicationKeys
@@ -457,9 +560,8 @@ myKeys = concat
 
 Some quick helper functions
 #+begin_src haskell
-spawnKeymap :: String -> [(String, String, String)] -> (String, X ())
-spawnKeymap key items = (key, whichkeySubmap def myConfig $ mapThd spawn <$> items)
-  where mapThd f (a,b,c) = (a,b,f c)
+spawnKeymap :: Text -> [(Text, Text, String)] -> (String, X ())
+spawnKeymap key items = (toString key, whichkeySubmap def myConfig $ mapThd3 spawn <$> items)
 #+end_src
 
 *** Controlling XMonad
@@ -520,8 +622,8 @@ buildConfig :: X Bool
 buildConfig =
   io $ (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
     Right ExitSuccess -> return True
-    Right (ExitFailure failCode) -> displayTextTill errTime (printf "Build failed with code: %d" failCode) >> return False
-    Left exception -> displayTextTill errTime ("Build failed with exception: " <> displayException exception) >> return False
+    Right (ExitFailure failCode) -> displayTextTill errTime (format "Build failed with code: {}" (Only failCode)) >> return False
+    Left exception -> displayTextTill errTime (format "Build failed with exception: {}" (Only $ displayException exception)) >> return False
   where
     errTime = 5
 
@@ -547,6 +649,6 @@ main = do
   conf' @ XConfig { layoutHook = Layout l }
                   <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
   launch
-    $ uncurry polybarEnable chosenPP
+    $ uncurry polybarEnable (bimapBoth ppTextToString chosenPP)
     $ conf' { layoutHook = l }
 #+end_src
