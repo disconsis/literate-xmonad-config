@@ -33,6 +33,8 @@ executable xmonad
     , text
     , text-format
     , flow
+    , filepath
+    , directory
 
   default-extensions:
       FlexibleContexts

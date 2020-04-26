@@ -37,15 +37,19 @@ Maybe auto-enable it when battery is below a threshold.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
+import System.IO (openFile)
 import System.Posix.IO
 import System.Posix.Types (CPid(..))
 import System.Process (system, readProcess)
 import System.Posix.Process (executeFile, getProcessID)
 import System.Posix.Signals (signalProcess, sigKILL)
 import Control.Concurrent (threadDelay)
-import System.Environment (getArgs)
+import System.Environment (getArgs, getEnv)
 import System.Exit (ExitCode(..))
 import Control.Exception (try, displayException, SomeException)
+import GHC.IO.Handle (hClose, hDuplicateTo)
+import System.FilePath.Posix ((</>))
+import System.Directory
 #+end_src
 
 Some general libraries
@@ -638,6 +642,27 @@ restartConfig resume = do
     catchIO (executeFile "bin/launch" True origArgs Nothing)
 #+end_src
 
+** Logging
+There's two ways to view xmonad logs. Either you set =exec <xmonad executable>= in your =.xinitrc= and redirect the logs of your X session with =startx &> <logfile>=.
+The other, cleaner way, is to tell hardcode the path in =xmonad= itself. This way you're free to start your session however and not capture /all/ the logs.
+
+This [[https://www.reddit.com/r/xmonad/comments/cr0ry3/viewing_stderr_from_stack_config/exkkmie/][code]] accomplishes this, courtesy of [[https://www.reddit.com/user/simonfxr/][u/simonfixr]].
+#+begin_src haskell
+redirectStdHandles :: FilePath -> IO ()
+redirectStdHandles directory = do
+  createDirectoryIfMissing True directory
+  hClose stdout
+  hClose stderr
+  stdout' <- openFile (directory </> "xmonad-stdout.log") WriteMode
+  stderr' <- openFile (directory </> "xmonad-stderr.log") WriteMode
+  hDuplicateTo stdout' stdout
+  hDuplicateTo stderr' stderr
+
+redirectLogs :: FilePath -> XConfig l -> XConfig l
+redirectLogs directory conf@XConfig{startupHook} =
+  conf { startupHook = io (redirectStdHandles directory) >> startupHook }
+#+end_src
+
 ** Main
 The default =xmonad= executable handles a lot of things in its =main= -- replacing, resuming, building etc.
 This makes it a lot more complicated to think about as we might reenter =main= at any point while maintaining state in the filesystem.
@@ -650,5 +675,6 @@ main = do
                   <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
   launch
     $ uncurry polybarEnable (bimapBoth ppTextToString chosenPP)
+    $ redirectLogs "/tmp"
     $ conf' { layoutHook = l }
 #+end_src
