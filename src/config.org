@@ -459,6 +459,7 @@ For now we'll just define a command to switch to the appropriate workspace for u
 serverCommands :: XConfig l -> [(String, String -> X ())]
 serverCommands config =
   [ ("switch", cursorSwitchWorkspace)
+  , ("refresh", const refresh)
   ]
 #+end_src
 

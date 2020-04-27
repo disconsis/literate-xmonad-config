@@ -17,4 +17,7 @@ MONITOR="$monitor" STDINFIFO="$fifo" polybar xmonad-stdin &
 # wait for polybar reader to start
 while ! pgrep -axf "cat ${fifo}"; do : ; done
 
+# refresh xmonad to display polybar correctly
+bin/launch client refresh &
+
 cat > "$fifo"
