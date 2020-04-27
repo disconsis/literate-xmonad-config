@@ -159,7 +159,9 @@ pad :: Text -> Text
 pad = wrap " " " "
 
 shorten :: Int -> Text -> Text
-shorten maxlen text = T.snoc (T.take maxlen text) ellipsis
+shorten maxlen text = case text `T.compareLength` maxlen of
+  GT -> T.snoc (T.take maxlen text) ellipsis
+  otherwise -> text
   where ellipsis = '…'
 
 format fmt = TL.toStrict . F.format fmt
