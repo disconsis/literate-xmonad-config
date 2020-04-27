@@ -167,6 +167,16 @@ dropThd3 (a,b,c) = (a,b)
 infixl 0 |>>
 x |>> f = x |> fmap f
 #+end_src
+
+XMonad installs =SIGCHLD= and =SIGPIPE= handlers which ignore these signals. This causes issues with some programs, like =stack build=.
+#+begin_src haskell
+withoutSignalHandlers :: X a -> X a
+withoutSignalHandlers action = do
+  uninstallSignalHandlers
+  result <- action
+  installSignalHandlers
+  return result
+#+end_src
 * Markup(s)
 Define interfaces for markup languages used later.
 
@@ -762,16 +772,14 @@ Using =SomeException= catches all exceptions
 #+begin_src haskell
 buildConfig :: X Bool
 buildConfig =
-  io $ (try (system "bin/build") :: IO (Either SomeException ExitCode)) >>= \case
-    Right ExitSuccess -> return True
-    Right (ExitFailure failCode) -> displayTextTill errTime (format "Build failed with code: {}" (Only failCode)) >> return False
-    Left exception -> displayTextTill errTime (format "Build failed with exception: {}" (Only $ displayException exception)) >> return False
-  where
-    errTime = 5
+  withoutSignalHandlers
+    (io (try (system "bin/build") :: IO (Either SomeException ExitCode)))
+    >>= \case
+      Right ExitSuccess -> return True
+      otherwise -> return False
 
 restartConfig :: Bool -> X ()
 restartConfig resume = do
-  uninstallSignalHandlers
   whenX buildConfig $ do
     broadcastMessage ReleaseResources
     io . flush =<< asks display
