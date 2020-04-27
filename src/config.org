@@ -29,7 +29,18 @@ Cons:
 - Have to add both org and literate-haskell markup for code blocks
 ** IDEA Use =X.L.Stoppable= to develop a power-savings mode
 Maybe auto-enable it when battery is below a threshold.
-** TODO =restartConfig='s displays a blank dzen when build fails
+** TODO =displayText='s message doesn't show up in some situations      :hard:
+I investigated this for some time and couldn't figure out why this happens.
+Granted, I did only test it in Xephyr.
+
+From some experiments,
+- both timed and forever versions work fine in whichkey
+- neither work when used as part of =serverCommands=
+- they work when used as part of a =spawn= call (=echo ... | dzen2 -p ...=)
+
+The last one suggests that the std input is not being passed correctly.
+Wrapping dzen in a shell script and calling that shows that this is indeed correct.
+Not sure how to fix it though. The fact that they work in whichkey is really surprising.
 
 * Imports
 Libraries for system IO actions
