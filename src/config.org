@@ -676,16 +676,15 @@ polybarCleanup = do
 And then plumb everything together with =DynamicBars= and =ManageDocks= (to actually make space for the bar).
 #+begin_src haskell
 polybarEnable :: LayoutClass l Window
-              => PP
-              -> PP
-              -> XConfig l
+              => XConfig l
               -> XConfig (ModifiedLayout AvoidStruts l)
-polybarEnable focusedPP unfocusedPP config@XConfig{..}  = docks $ config
+polybarEnable config@XConfig{..}  = docks $ config
   { startupHook     = startupHook      <+> dynStatusBarStartup polybarStartup polybarCleanup
   , handleEventHook = handleEventHook  <+> dynStatusBarEventHook polybarStartup polybarCleanup
   , logHook         = logHook          <+> multiPP focusedPP unfocusedPP
   , layoutHook      = avoidStruts $ layoutHook
   }
+  where (focusedPP, unfocusedPP) = bimapBoth ppTextToString chosenPP
 #+end_src
 
 * Config
@@ -858,7 +857,7 @@ main :: IO ()
 main = do
   conf' <- handleArgs myConfig
   launch
-    $ uncurry polybarEnable (bimapBoth ppTextToString chosenPP)
+    $ polybarEnable
     $ serverEnable
     $ conf'
 #+end_src
