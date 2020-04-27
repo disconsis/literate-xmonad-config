@@ -298,9 +298,10 @@ I find this a lot better for discoverability, as seeing all bindings at once is 
 We use =dzen= with some basic settings to display text on the screen. I would've liked to use =XMonad.Util.Dzen= for this,
 but it only contains =X= actions, while we only have access to =IO= in some situations.
 #+begin_src haskell
+displayTextFont :: String
 displayTextFont = "Iosevka:pixelsize=15"
 
-displayTextSync :: MonadIO m => Maybe Rational -> Text -> m ()
+displayTextSync :: MonadIO m => Maybe Int -> Text -> m ()
 displayTextSync time text = io . void $ readProcess "dzen2"
   (("-p" : timeArg) ++
    [ "-l", show numLines
@@ -311,11 +312,11 @@ displayTextSync time text = io . void $ readProcess "dzen2"
   (toString text)
   where
     numLines = max 0 (length (lines text) - 1)  -- we only count slave lines, so everything after the first one
-    timeArg = maybeToList $ show . seconds <$> time
+    timeArg = maybeToList $ show <$> time
 
 displayText time text = void $ xfork $ displayTextSync time text
 
-displayTextSyncTill, displayTextTill :: MonadIO m => Rational -> Text -> m ()
+displayTextSyncTill, displayTextTill :: MonadIO m => Int -> Text -> m ()
 displayTextSyncTill = displayTextSync . Just
 displayTextTill = displayText . Just
 
