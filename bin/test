@@ -6,11 +6,12 @@ Xephyr $TEST_DISPLAY +xinerama +extension RANDR \
        -ac -br -reset -terminate -softCursor -resizeable \
        1>/dev/null 2>&1 &
 
-export DISPLAY=":1"
+export DISPLAY="$TEST_DISPLAY"
 
 # for some reason restarting xmonad without any windows
 # makes "openDisplay" fail, so we open a random window
 sleep 2 # wait for windows to appear
-xclock 1>/dev/null 2>&1 &
+
+(kitty || urxvt || xterm) 1>/dev/null 2>&1 &
 
 stack run -- start --test $@ || true

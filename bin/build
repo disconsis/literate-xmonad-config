@@ -14,7 +14,7 @@ function notify() {
 
 # tangle the org file -- `ntangle` is much faster than the elisp implementation
 # see [[https://github.com/OrgTangle/ntangle]]
-ntangle src/config.org
+ntangle src/config.org 1>/dev/null
 
 stack build
 status=$?
