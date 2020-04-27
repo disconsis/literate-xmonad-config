@@ -127,6 +127,17 @@ Library to listen for external messages
 import XMonad.Hooks.ServerMode
 #+end_src
 
+X11 imports to send atoms to the server
+#+begin_src haskell
+import qualified Graphics.X11.Xlib as X11
+import qualified Graphics.X11.Xlib.Extras as X11
+#+end_src
+
+Argument parsing library
+#+begin_src haskell
+import Options.Applicative
+#+end_src
+
 * Utils
 Some utility functions to make life easy
 #+begin_src haskell
@@ -143,6 +154,9 @@ shorten maxlen text = T.snoc (T.take maxlen text) ellipsis
 
 format fmt = TL.toStrict . F.format fmt
 format1 str item = format str (Only item)
+
+-- parsing
+withInfo opts desc = info (helper <*> opts) $ progDesc desc
 
 -- three-tuples
 mapThd3 f (a,b,c) = (a,b, f c)
@@ -377,22 +391,9 @@ There's two ways to solve this:
 The second solution has an implicit failure state (when the input string is empty), but probably much less wasteful. This is the one that's used here. We enforce that the string is not empty through the command-line parser.
 
 ** Client
-#+PROPERTY: header-args :tangle "Client.hs"
 We first write the client which can send commands to the server.
 
-X11 imports to send atoms to the server
-#+begin_src haskell
-import Graphics.X11.Xlib
-import Graphics.X11.Xlib.Extras
-#+end_src
-
-Argument parsing library
-#+begin_src haskell
-import Options.Applicative
-#+end_src
-
 The server listens for particular "addresses" that we can send arguments to.
-
 We represent this with a simple datatype.
 #+begin_src haskell
 data Command = Command { addr :: String, command_ :: String, input :: [String] }
@@ -403,53 +404,17 @@ I don't understand all of this, but it should /Just Work(TM)/
 #+begin_src haskell
 sendCommand :: Command -> IO ()
 sendCommand Command{addr, command_, input} = do
-  let joinedInput = unwords (command_:input)
-  display <- openDisplay ""
-  rootWin <- rootWindow display $ defaultScreen display
-  addrAtom <- internAtom display addr False
-  msgAtom <- internAtom display joinedInput False
-  allocaXEvent $ \event -> do
-                  setEventType event clientMessage
-                  setClientMessageEvent event rootWin addrAtom 32 msgAtom currentTime
-                  sendEvent display rootWin False structureNotifyMask event
-                  sync display False
+  let joinedInput = P.unwords (command_:input)
+  display <- X11.openDisplay ""
+  rootWin <- X11.rootWindow display $ X11.defaultScreen display
+  addrAtom <- X11.internAtom display addr False
+  msgAtom <- X11.internAtom display joinedInput False
+  X11.allocaXEvent $ \event -> do
+                  X11.setEventType event X11.clientMessage
+                  X11.setClientMessageEvent event rootWin addrAtom 32 msgAtom X11.currentTime
+                  X11.sendEvent display rootWin False X11.structureNotifyMask event
+                  X11.sync display False
 #+end_src
-
-Then we write a command line parser to create an instance of this type.
-#+begin_src haskell
-commandParser :: Parser Command
-commandParser = Command
-                <$> strOption
-                      (help "Target address for the command"
-                       <> short 'a'
-                       <> long "addr"
-                       <> metavar "ADDR"
-                       <> value "XMONAD_COMMAND"
-                       <> showDefault)
-                <*> strArgument
-                      (help "The command to call"
-                       <> metavar "COMMAND")
-                <*> many
-                      (strArgument
-                        (help "Arguments for the command"
-                         <> metavar "ARGS"))
-#+end_src
-
-Finally, plumb it all together
-#+begin_src haskell
-main :: IO ()
-main = execParser opts >>= sendCommand
-  where
-    opts = info (helper <*> commandParser)
-      (header "Send a command to the XMonad server"
-       <> progDesc "Send ARGS to the xmonad server listener at ADDR"
-       <> fullDesc)
-#+end_src
-
-This can be run through the shell script =bin/client= for easier access.
-Keep in mind that if you're testing the client script through a terminal in your current X session,
-then the =DISPLAY= variable needs to be set appropriately.
-
 ** Server
 #+PROPERTY: header-args :tangle "Main.hs"
 
@@ -708,10 +673,12 @@ myTerminal = "kitty tmux -2"
 Selecting the mod key is a bit trickier than expected to be able to test the config in an inferior X session.
 The key I want to use is =Alt= (=mod1Mask=), but if I'm also using this config while testing a modified version of it,
 then those keypresses are intercepted by XMonad and not passed to the inferior X session. The simplest way to get
-around this is to switch to =Super= (=mod4Mask=) when an additional =--test= argument is passed. This is handled by =handleArgs=.
+around this is to switch to =Super= (=mod4Mask=) when an additional =--test= argument is passed.
 #+begin_src haskell
 myModMask   = mod1Mask
 testModMask = mod4Mask
+
+setTestModMask config = config { modMask = testModMask }
 #+end_src
 
 ** Keys
@@ -834,30 +801,85 @@ redirectLogs directory conf@XConfig{startupHook} =
   conf { startupHook = io (redirectStdHandles directory) >> startupHook }
 #+end_src
 
-** Main
-The default =xmonad= executable handles a lot of things in its =main= -- replacing, resuming, building etc.
-This makes it a lot more complicated to think about as we might reenter =main= at any point while maintaining state in the filesystem.
-To keep things simple, in this configuration, building is handled by the =build= script which can be executed by hand or during recompilation through the executable.
+** Argument parsing
+We need to handle arguments to disambiguate between three cases:
+1. Main: running XMonad as a WM (and a server)
+2. Test: running XMonad in a test environment
+3. Client: running as a client to send a message to the XMonad server
 
-We handle arguments here.
-For now, there's only two conditions we care about: is this a test environment or not.
-In case it is, we want to switch the mod key and log to the terminal.
-Otherwise, we use the default mod key and log to files to /tmp.
+We represent this as an ADT.
 #+begin_src haskell
-handleArgs :: XConfig l -> IO (XConfig l)
-handleArgs config = getArgs >>= \case
-  []         -> pure $ redirectLogs "/tmp" $ config
-  ["--test"] -> pure $ config { modMask = testModMask }
-  args       -> hPutStrLn stderr ("Unexpected arguments encountered: " ++ show args)
-                >> pure config
+data Executable = XMonad { testing :: Bool } | Client Command
 #+end_src
 
+The XMonad parser is quite simple.
 #+begin_src haskell
-main :: IO ()
-main = do
-  conf' <- handleArgs myConfig
-  launch
+xmonadParser :: Parser Executable
+xmonadParser = XMonad
+  <$> switch (long "test" <> help "Run XMonad in a test environment" )
+#+end_src
+
+The client parser is a bit more involved
+#+begin_src haskell
+clientParser :: Parser Executable
+clientParser = Client <$> commandParser
+
+commandParser :: Parser Command
+commandParser = Command
+                <$> strOption
+                      (help "Target address for the command"
+                       <> short 'a'
+                       <> long "addr"
+                       <> metavar "ADDR"
+                       <> value serverAddress
+                       <> showDefault)
+                <*> strArgument
+                      (help "The command to call"
+                       <> metavar "COMMAND")
+                <*> many
+                      (strArgument
+                        (help "Arguments for the command"
+                         <> metavar "ARGS"))
+#+end_src
+
+Finally we separate these two.
+#+begin_src haskell
+mainParser :: Parser Executable
+mainParser = subparser $ mconcat
+  [ command "start"  (xmonadParser `withInfo` "Start XMonad")
+  , command "client" (clientParser `withInfo` "Send a message to the XMonad server")
+  ]
+
+parseArguments :: IO Executable
+parseArguments = execParser (mainParser `withInfo` "Interact with XMonad")
+#+end_src
+
+** Main
+We define the interpreters for each possible usage.
+#+begin_src haskell
+runXMonad config
+    = launch
     $ polybarEnable
     $ serverEnable
-    $ conf'
+    $ config
+
+runExecutable :: Executable -> IO ()
+runExecutable (XMonad { testing = False })
+    = runXMonad
+    $ redirectLogs "/tmp"
+    $ myConfig
+
+runExecutable (XMonad { testing = True })
+    = runXMonad
+    $ setTestModMask
+    $ myConfig
+
+runExecutable (Client command)
+    = sendCommand command
+#+end_src
+
+Finally, we run the parser and interpret the result.
+#+begin_src haskell
+main :: IO ()
+main = parseArguments >>= runExecutable
 #+end_src
