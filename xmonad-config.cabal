@@ -35,6 +35,7 @@ executable xmonad
     , filepath
     , directory
     , optparse-applicative
+    , time
 
   default-extensions:
       FlexibleContexts

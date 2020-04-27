@@ -42,6 +42,8 @@ The last one suggests that the std input is not being passed correctly.
 Wrapping dzen in a shell script and calling that shows that this is indeed correct.
 Not sure how to fix it though. The fact that they work in whichkey is really surprising.
 
+** TODO Try to speed up message passing between client and server     :hard:
+This is the cause of the ~1s taken for window switching from the status bar.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
@@ -58,6 +60,7 @@ import Control.Exception (try, displayException, SomeException)
 import GHC.IO.Handle (hClose, hDuplicateTo)
 import System.FilePath.Posix ((</>))
 import System.Directory
+import Data.Time
 #+end_src
 
 Some general libraries
@@ -174,6 +177,15 @@ withInfo opts desc = info (helper <*> opts) $ progDesc desc
 mapThd3 f (a,b,c) = (a,b, f c)
 dropSnd3 (a,b,c) = (a,c)
 dropThd3 (a,b,c) = (a,b)
+
+-- timing
+logDuration :: MonadIO m => m a -> m a
+logDuration action = do
+  startTime <- io getCurrentTime
+  result <- action
+  endTime <- io getCurrentTime
+  putStrLn $ "Time taken: " ++ show (diffUTCTime endTime startTime)
+  return result
 
 -- reverse function application
 infixl 0 |>>
@@ -522,6 +534,7 @@ The first of these requirements is pretty standard, and can be achieved using so
 The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
 The other option is to use =X.H.ServerMode= which allows us to call arbitrary actions from the bar, like changing the layout.
 This is slightly more complicated, but should be worth it for the extensibility. This is the option used here.
+A major downside of this approach is that it is slow - taking up to a second sometimes. Some logging reveals that the message passing is the bottleneck, and there isn't much that can be done about that. Switching to the =xdotool= approach is thus quite attractive, but has the downside that the action that can be taken is much simpler (equivalent to a =StackSet.view=) and somewhat unintuitive. Since I don't use this too much, I'll let this be for now.
 
 The third and fourth can be achieved with =X.H.DynamicBars=.
 
