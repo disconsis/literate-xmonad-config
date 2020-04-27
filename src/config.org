@@ -55,6 +55,7 @@ import Relude as R
 import Relude.Extra.Foldable1
 import Relude.Extra.Tuple
 import Relude.Extra.Bifunctor
+import Relude.Extra.Map (lookup)
 import qualified Relude.Unsafe as Unsafe
 import qualified Prelude as P
 import Data.Char
@@ -71,6 +72,7 @@ import Flow
 Base =XMonad= import(s)
 #+begin_src haskell
 import XMonad hiding (Color)
+import qualified XMonad.StackSet as W
 #+end_src
 
 Some utilities from =xmonad-contrib=
@@ -118,6 +120,11 @@ import XMonad.Hooks.ManageDocks (docks, avoidStruts, AvoidStruts)
 Libraries for pretty-printing to the status bar
 #+begin_src haskell
 import XMonad.Util.WorkspaceCompare (getSortByIndex)
+#+end_src
+
+Library to listen for external messages
+#+begin_src haskell
+import XMonad.Hooks.ServerMode
 #+end_src
 
 * Utils
@@ -356,6 +363,136 @@ whichkeySubmap whichkeyConf config keybinds = do
   spawn "pkill dzen2"
   where
     toHelp = unlines . whichkeyShowBindings whichkeyConf
+#+end_src
+
+* Client-Server
+Using =X.H.ServerMode= allows us to control XMonad externally.
+This allows for executing commands from the status bar, external prompts like =albert= etc.
+
+=ServerMode='s actions are of the type =X ()=. This prevents them from taking any input, which reduces its usability (eg. for switching workspaces, the workspace name needs to be taken as input).
+There's two ways to solve this:
+1. Create a different listener for each command that needs an input.
+2. Take the first word as the name of the command and the rest as arguments.
+
+The second solution has an implicit failure state (when the input string is empty), but probably much less wasteful. This is the one that's used here. We enforce that the string is not empty through the command-line parser.
+
+** Client
+#+PROPERTY: header-args :tangle "Client.hs"
+We first write the client which can send commands to the server.
+
+X11 imports to send atoms to the server
+#+begin_src haskell
+import Graphics.X11.Xlib
+import Graphics.X11.Xlib.Extras
+#+end_src
+
+Argument parsing library
+#+begin_src haskell
+import Options.Applicative
+#+end_src
+
+The server listens for particular "addresses" that we can send arguments to.
+
+We represent this with a simple datatype.
+#+begin_src haskell
+data Command = Command { addr :: String, command_ :: String, input :: [String] }
+#+end_src
+
+This code is modified from the documentation of =ServerMode=.
+I don't understand all of this, but it should /Just Work(TM)/
+#+begin_src haskell
+sendCommand :: Command -> IO ()
+sendCommand Command{addr, command_, input} = do
+  let joinedInput = unwords (command_:input)
+  display <- openDisplay ""
+  rootWin <- rootWindow display $ defaultScreen display
+  addrAtom <- internAtom display addr False
+  msgAtom <- internAtom display joinedInput False
+  allocaXEvent $ \event -> do
+                  setEventType event clientMessage
+                  setClientMessageEvent event rootWin addrAtom 32 msgAtom currentTime
+                  sendEvent display rootWin False structureNotifyMask event
+                  sync display False
+#+end_src
+
+Then we write a command line parser to create an instance of this type.
+#+begin_src haskell
+commandParser :: Parser Command
+commandParser = Command
+                <$> strOption
+                      (help "Target address for the command"
+                       <> short 'a'
+                       <> long "addr"
+                       <> metavar "ADDR"
+                       <> value "XMONAD_COMMAND"
+                       <> showDefault)
+                <*> strArgument
+                      (help "The command to call"
+                       <> metavar "COMMAND")
+                <*> many
+                      (strArgument
+                        (help "Arguments for the command"
+                         <> metavar "ARGS"))
+#+end_src
+
+Finally, plumb it all together
+#+begin_src haskell
+main :: IO ()
+main = execParser opts >>= sendCommand
+  where
+    opts = info (helper <*> commandParser)
+      (header "Send a command to the XMonad server"
+       <> progDesc "Send ARGS to the xmonad server listener at ADDR"
+       <> fullDesc)
+#+end_src
+
+This can be run through the shell script =bin/client= for easier access.
+Keep in mind that if you're testing the client script through a terminal in your current X session,
+then the =DISPLAY= variable needs to be set appropriately.
+
+** Server
+#+PROPERTY: header-args :tangle "Main.hs"
+
+=ServerMode= defaults this address to ="XMONAD_COMMAND"=. Since we're using the second method,
+there's no real reason to change this or use multiple addresses.
+#+begin_src haskell
+serverAddress :: String
+serverAddress = "XMONAD_COMMAND"
+#+end_src
+
+We define a list of commands for this address.
+For now we'll just define a command to switch to the appropriate workspace for use in the status bar.
+#+begin_src haskell
+serverCommands :: XConfig l -> [(String, String -> X ())]
+serverCommands config =
+  [ ("switch", windows . W.view)
+  ]
+#+end_src
+
+Then we need to define a function to split the input and lookup the appropriate action to take.
+#+begin_src haskell
+serverCallCommand :: Map String (String -> X ()) -> String -> X ()
+serverCallCommand commandMap input =
+  case lookup command commandMap of
+    Just action -> action input'
+    Nothing     -> io $ hPutStrLn stderr $ printf "Command '%s' not found" command
+  where
+    (command, input') = second (drop 1) $ break (== ' ') input
+#+end_src
+
+Finally, we set up the listener.
+#+begin_src haskell
+serverListenerHook :: XConfig l -> Event -> X All
+serverListenerHook config =
+  let commands = fromList (serverCommands config) in
+  serverModeEventHookF serverAddress (serverCallCommand commands)
+#+end_src
+
+For convenience, we provide a command to add this functionality to a config.
+#+begin_src haskell
+serverEnable :: XConfig l -> XConfig l
+serverEnable config@XConfig{handleEventHook} = config
+  { handleEventHook = handleEventHook <+> serverListenerHook config }
 #+end_src
 
 * Polybar
@@ -722,5 +859,6 @@ main = do
   conf' <- handleArgs myConfig
   launch
     $ uncurry polybarEnable (bimapBoth ppTextToString chosenPP)
+    $ serverEnable
     $ conf'
 #+end_src
