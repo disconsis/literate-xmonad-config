@@ -556,7 +556,6 @@ polybarEnable focusedPP unfocusedPP config@XConfig{..}  = docks $ config
 myConfig = def
   { terminal        = myTerminal
   , modMask         = myModMask
-  , handleExtraArgs = handleTestConditions
   , keys            = myKeymap
   , mouseBindings   = myMouseBindings
   , startupHook     = myStartupHook
@@ -573,16 +572,10 @@ myTerminal = "kitty tmux -2"
 Selecting the mod key is a bit trickier than expected to be able to test the config in an inferior X session.
 The key I want to use is =Alt= (=mod1Mask=), but if I'm also using this config while testing a modified version of it,
 then those keypresses are intercepted by XMonad and not passed to the inferior X session. The simplest way to get
-around this is to switch to =Super= (=mod4Mask=) when an additional =--test= argument is passed.
+around this is to switch to =Super= (=mod4Mask=) when an additional =--test= argument is passed. This is handled by =handleArgs=.
 #+begin_src haskell
 myModMask   = mod1Mask
 testModMask = mod4Mask
-
-handleTestConditions :: [String] -> XConfig Layout -> IO (XConfig Layout)
-handleTestConditions args config = case args of
-  []         -> return config
-  ["--test"] -> return config { modMask = testModMask }
-  otherwise  -> putStrLn ("Unexpected arguments encountered: " ++ show args) >> return config
 #+end_src
 
 ** Keys
@@ -709,14 +702,25 @@ redirectLogs directory conf@XConfig{startupHook} =
 The default =xmonad= executable handles a lot of things in its =main= -- replacing, resuming, building etc.
 This makes it a lot more complicated to think about as we might reenter =main= at any point while maintaining state in the filesystem.
 To keep things simple, in this configuration, building is handled by the =build= script which can be executed by hand or during recompilation through the executable.
+
+We handle arguments here.
+For now, there's only two conditions we care about: is this a test environment or not.
+In case it is, we want to switch the mod key and log to the terminal.
+Otherwise, we use the default mod key and log to files to /tmp.
+#+begin_src haskell
+handleArgs :: XConfig l -> IO (XConfig l)
+handleArgs config = getArgs >>= \case
+  []         -> pure $ redirectLogs "/tmp" $ config
+  ["--test"] -> pure $ config { modMask = testModMask }
+  args       -> hPutStrLn stderr ("Unexpected arguments encountered: " ++ show args)
+                >> pure config
+#+end_src
+
 #+begin_src haskell
 main :: IO ()
 main = do
-  args <- getArgs
-  conf' @ XConfig { layoutHook = Layout l }
-                  <- handleExtraArgs myConfig args myConfig{ layoutHook = Layout (layoutHook myConfig) }
+  conf' <- handleArgs myConfig
   launch
     $ uncurry polybarEnable (bimapBoth ppTextToString chosenPP)
-    $ redirectLogs "/tmp"
-    $ conf' { layoutHook = l }
+    $ conf'
 #+end_src
