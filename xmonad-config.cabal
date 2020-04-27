@@ -43,3 +43,5 @@ executable xmonad
     , OverloadedStrings
     , NamedFieldPuns
     , RecordWildCards
+    , BlockArguments
+    , ScopedTypeVariables

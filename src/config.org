@@ -82,7 +82,7 @@ import Flow
 
 Base =XMonad= import(s)
 #+begin_src haskell
-import XMonad hiding (Color)
+import XMonad hiding (Color, whenJust)
 import qualified XMonad.StackSet as W
 #+end_src
 
@@ -118,7 +118,6 @@ import qualified Data.Text.Format as F
 Some helpers for output and parsing
 #+begin_src haskell
 import XMonad.Config.Dmwit (outputOf)
-import Text.Read
 #+end_src
 
 Libraries for managing and logging to the status bar.
@@ -440,20 +439,20 @@ sendCommand Command{addr, command_, input} = do
 ** Server
 #+PROPERTY: header-args :tangle "Main.hs"
 
+We define a list of commands that can be called.
+For now we'll just define a command to switch to the appropriate workspace for use in the status bar.
+#+begin_src haskell
+serverCommands :: XConfig l -> [(String, String -> X ())]
+serverCommands config =
+  [ ("switch", cursorSwitchWorkspace)
+  ]
+#+end_src
+
 =ServerMode= defaults this address to ="XMONAD_COMMAND"=. Since we're using the second method,
 there's no real reason to change this or use multiple addresses.
 #+begin_src haskell
 serverAddress :: String
 serverAddress = "XMONAD_COMMAND"
-#+end_src
-
-We define a list of commands for this address.
-For now we'll just define a command to switch to the appropriate workspace for use in the status bar.
-#+begin_src haskell
-serverCommands :: XConfig l -> [(String, String -> X ())]
-serverCommands config =
-  [ ("switch", windows . W.view)
-  ]
 #+end_src
 
 Then we need to define a function to split the input and lookup the appropriate action to take.
@@ -482,6 +481,32 @@ serverEnable config@XConfig{handleEventHook} = config
   { handleEventHook = handleEventHook <+> serverListenerHook config }
 #+end_src
 
+*** Switch workspaces
+While the staple =StackSet.view= and =StackSet.greedyView= work well enough for the server's ="switch"= action, it has some unintuitive behaviour in case of multiple monitors.
+Imagine there are two monitors and you click the workspace button on the status bar on the unfocused monitor -
+this would activate the workspace on the active monitor, which is not the desired behaviour.
+If the workspace you click on is the one that's focused on the foucsed monitor, then you probably want that
+workspace to be focused on this monitor.
+In both cases, the monitor the cursor is on is the one that's expected to be focused, so we should do this first.
+Then, as seen in the second case, we should always put the selected workspace on this monitor, so we should use =greedyView= rather than =view=.
+
+Accordingly, first, an action to focus the workspace the cursor is on.
+#+begin_src haskell
+focusCursor :: X ()
+focusCursor = void $ runMaybeT $ do
+  pos <- MaybeT $ reader mousePosition
+  workspace <- W.tag . W.workspace <$> MaybeT (uncurry pointScreen pos)
+  lift $ windows $ W.view workspace
+#+end_src
+
+Then view the selected workspace on this monitor.
+#+begin_src haskell
+cursorSwitchWorkspace :: WorkspaceId -> X ()
+cursorSwitchWorkspace workspace = do
+  focusCursor
+  windows $ W.greedyView workspace
+#+end_src
+
 * Polybar
 [[https://github.com/polybar/polybar][Polybar]] is pretty cool. It has a lot of efficient modules for most things and is quite customizable.
 Aside from the actual choice of bar, there are things I want from a status bar:
@@ -494,9 +519,34 @@ The first of these requirements is pretty standard, and can be achieved using so
 
 The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
 The other option is to use =X.H.ServerMode= which allows us to call arbitrary actions from the bar, like changing the layout.
-This is slightly more complicated, but should be worth it for the extensibility.
+This is slightly more complicated, but should be worth it for the extensibility. This is the option used here.
 
 The third and fourth can be achieved with =X.H.DynamicBars=.
+
+** Workspace switch buttons
+Since polybar can be formatted to call scripts on click, we need to write a function which messages the
+server to switch to the workspace clicked on and include it in our pretty printer.
+This function needs to be the first to run on the workspace name, since it needs access to the unaltered
+name to switch to it. It should also pad the name so that it's easy to click.
+#+begin_src haskell
+workspaceSwitcher :: WorkspaceIdT -> Text
+workspaceSwitcher workspace =
+  lemonbarFormat [Action LeftClick switchCommand] . pad $ workspace
+  where
+    switchCommand = format1 "bin/launch client switch '{}'" workspace
+#+end_src
+
+Since it needs to be applied in a bunch of places, we create a function to transform a pretty-printer to use it.
+#+begin_src haskell
+workspaceSwitcheroo :: PPText -> PPText
+workspaceSwitcheroo ppt@PPText{..} = ppt
+  { pptCurrent = pptCurrent . workspaceSwitcher
+  , pptVisible = pptVisible . workspaceSwitcher
+  , pptHidden = pptHidden . workspaceSwitcher
+  , pptHiddenNoWindows = pptHiddenNoWindows . workspaceSwitcher
+  , pptVisibleNoWindows = fmap (. workspaceSwitcher) pptVisibleNoWindows
+  }
+#+end_src
 
 ** Pretty-printing
 First, some code to switch between text and string
@@ -588,18 +638,19 @@ This is the one that finally gets applied.
 #+begin_src haskell
 chosenPP :: (PPText, PPText)
 chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
+         |> bimapBoth workspaceSwitcheroo
 #+end_src
 
 *** one-dark
 #+begin_src haskell
 onedarkFocusedPP :: PPText
 onedarkFocusedPP = basicPP
-  { pptCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ] . pad
-  , pptVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ] . pad
-  , pptVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ] . pad
-  , pptHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ] . pad
-  , pptHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ] . pad
-  , pptUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ] . pad
+  { pptCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ]
+  , pptVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ]
+  , pptVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ]
+  , pptHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ]
+  , pptHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ]
+  , pptUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ]
   , pptTitle = lemonbarFormat [ Foreground onedarkGrey ] . shorten 50
   , pptLayout = lemonbarFormat [ Foreground onedarkYellow ]
   }
