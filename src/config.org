@@ -277,9 +277,12 @@ lemonbarFormatOne fmt = case fmt of
   (Overline color)        -> wrap (bracket (format1 "o{}" color) <> bracket "+o") (bracket "-o")
   (Font index)            -> wrap (bracket (format1 "T{}" index)) (bracket "T-")
   (Offset size)           -> (bracket (format1 "O{}" size) <>)
-  (Action button command) -> wrap (bracket (format "A{}:{}:" (fromMouseButton button, command))) (bracket "A")
+  (Action button cmd)     -> wrap (bracket (format "A{}:{}:" (fromMouseButton button, (escape ':' cmd)))) (bracket "A")
   where
     bracket = wrap "%{" "}"
+    escape char =
+      let charT = T.singleton char in
+      T.replace charT (T.cons '\\' charT)
 
 lemonbarFormat :: [LemonbarFormatting] -> Text -> Text
 lemonbarFormat fmts = foldr (.) id (lemonbarFormatOne <$> fmts)
