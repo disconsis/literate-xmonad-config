@@ -851,14 +851,14 @@ Using =SomeException= catches all exceptions
 #+begin_src haskell
 buildConfig :: X Bool
 buildConfig =
-  withoutSignalHandlers
-    (io (try (system "bin/build") :: IO (Either SomeException ExitCode)))
-    >>= \case
-      Right ExitSuccess -> return True
-      otherwise -> return False
+  (io (try (system "bin/build") :: IO (Either SomeException ExitCode)))
+  >>= \case
+    Right ExitSuccess -> return True
+    otherwise -> return False
 
 restartConfig :: Bool -> X ()
-restartConfig resume = do
+restartConfig resume =
+  withoutSignalHandlers $
   whenX buildConfig $ do
     broadcastMessage ReleaseResources
     io . flush =<< asks display
