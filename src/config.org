@@ -741,6 +741,61 @@ polybarEnable config@XConfig{..}  = docks $ config
   where (focusedPP, unfocusedPP) = bimapBoth ppTextToString chosenPP
 #+end_src
 
+* Workspaces
+** Static & Freeform
+Static workspaces - each one dedicated to a specific purpose - is often too restrictive. However, having a few with predefined purposes (todos, music, messaging etc.) makes it easy to manage and switch to them. In the past, I've worked with 12 workspaces - 7 of them free-form and 5 predefined. This worked quite well.
+#+begin_src haskell
+data WorkspaceType = Predefined | Freeform
+  deriving (Eq, Ord, Show)
+#+end_src
+
+Thus the workspace type becomes
+#+begin_src haskell
+data Workspace = Ws { type_ :: WorkspaceType, name :: WorkspaceIdT }
+  deriving (Eq, Ord, Show)
+#+end_src
+
+Finally, we set the names for the predefined workspaces. Here these are fontawesome unicode names which /should/ indicate their purpose.
+#+begin_src haskell
+wsTodo  = "\xf00b"
+wsConf  = "\xf992"
+wsEntt  = "\xf880"
+wsMusic = "\xf001"
+wsComms = "\xf086"
+#+end_src
+
+Then we need to define the workspace in the order of the keys used to access them.
+We use the number row for this purpose.
+#+begin_src haskell
+myWorkspaceKeys = ["0"] ++ fmap show [1..9] ++ ["-", "="]
+
+myWorkspaces :: [(WorkspaceType, WorkspaceId)]
+myWorkspaces =
+     [ (Predefined, wsTodo) ]
+  ++ ( (Freeform,) . show <$> [1..7] )
+  ++ [ (Predefined, wsConf)
+     , (Predefined, wsEntt)
+     , (Predefined, wsMusic)
+     , (Predefined, wsComms)
+     ]
+
+#+end_src
+
+We then derive the rest we need.
+#+begin_src haskell
+myPredefinedWorkspaces :: Set WorkspaceId
+myPredefinedWorkspaces =
+  myWorkspaces
+  |> filter ((Predefined ==) . fst)
+  |>> snd
+  |> fromList
+
+myWorkspaceStrings :: [String]
+myWorkspaceStrings = snd <$> myWorkspaces
+
+myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaces
+#+end_src
+
 * Config
 #+begin_src haskell
 myConfig = def
@@ -749,6 +804,7 @@ myConfig = def
   , keys            = myKeymap
   , mouseBindings   = myMouseBindings
   , startupHook     = myStartupHook
+  , workspaces      = myWorkspaceStrings
   }
 #+end_src
 
