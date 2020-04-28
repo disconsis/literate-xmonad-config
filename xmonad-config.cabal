@@ -46,3 +46,4 @@ executable xmonad
     , RecordWildCards
     , BlockArguments
     , ScopedTypeVariables
+    , TupleSections

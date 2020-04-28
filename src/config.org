@@ -69,7 +69,7 @@ import Relude as R
 import Relude.Extra.Foldable1
 import Relude.Extra.Tuple
 import Relude.Extra.Bifunctor
-import Relude.Extra.Map (lookup)
+import Relude.Extra.Map (member, lookup)
 import qualified Relude.Unsafe as Unsafe
 import qualified Prelude as P
 import Data.Char
@@ -151,6 +151,16 @@ Argument parsing library
 import Options.Applicative
 #+end_src
 
+Rename workspaces
+#+begin_src haskell
+import XMonad.Actions.WorkspaceNames
+#+end_src
+
+Provide graphical prompts
+#+begin_src haskell
+import XMonad.Prompt
+#+end_src
+
 * Utils
 Some utility functions to make life easy
 #+begin_src haskell
@@ -200,6 +210,13 @@ withoutSignalHandlers action = do
   result <- action
   installSignalHandlers
   return result
+#+end_src
+
+X accessors
+#+begin_src haskell
+withCurrentWorkspace :: (WorkspaceId -> X ()) -> X ()
+withCurrentWorkspace action =
+  withWindowSet (W.current .> W.workspace .> W.tag .> action)
 #+end_src
 * Markup(s)
 Define interfaces for markup languages used later.
@@ -652,9 +669,13 @@ basicPP = def
 
 This is the one that finally gets applied.
 #+begin_src haskell
-chosenPP :: (PPText, PPText)
+chosenPP :: (X PP, X PP)
 chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
-         |> bimapBoth workspaceSwitcheroo
+         |> bimapBoth
+              (  workspaceSwitcheroo
+              .> ppTextToString
+              .> workspaceNamesPP
+              )
 #+end_src
 
 *** one-dark
@@ -735,10 +756,10 @@ polybarEnable :: LayoutClass l Window
 polybarEnable config@XConfig{..}  = docks $ config
   { startupHook     = startupHook      <+> dynStatusBarStartup polybarStartup polybarCleanup
   , handleEventHook = handleEventHook  <+> dynStatusBarEventHook polybarStartup polybarCleanup
-  , logHook         = logHook          <+> multiPP focusedPP unfocusedPP
+  , logHook         = logHook          <+> multiPP' chosenPP
   , layoutHook      = avoidStruts $ layoutHook
   }
-  where (focusedPP, unfocusedPP) = bimapBoth ppTextToString chosenPP
+  where multiPP' (pp1, pp2) = join $ multiPP <$> pp1 <*> pp2
 #+end_src
 
 * Workspaces
@@ -746,12 +767,6 @@ polybarEnable config@XConfig{..}  = docks $ config
 Static workspaces - each one dedicated to a specific purpose - is often too restrictive. However, having a few with predefined purposes (todos, music, messaging etc.) makes it easy to manage and switch to them. In the past, I've worked with 12 workspaces - 7 of them free-form and 5 predefined. This worked quite well.
 #+begin_src haskell
 data WorkspaceType = Predefined | Freeform
-  deriving (Eq, Ord, Show)
-#+end_src
-
-Thus the workspace type becomes
-#+begin_src haskell
-data Workspace = Ws { type_ :: WorkspaceType, name :: WorkspaceIdT }
   deriving (Eq, Ord, Show)
 #+end_src
 
@@ -796,6 +811,37 @@ myWorkspaceStrings = snd <$> myWorkspaces
 myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaces
 #+end_src
 
+** Naming
+Naming workspaces helps immensely in identifying them just from the status bar, and thus managing them.
+This only makes sense for freeform workspaces though.
+
+We use =X.A.WorkspaceNames= for this.
+=workspaceNamesPP= from that module makes a pretty-printer print the workspace names.
+
+We also need a prompt for reading the workspace name with =renameWorkspace=.
+Let's just use the default for the time being.
+#+begin_src haskell
+renamePrompt :: XPConfig
+renamePrompt = def
+#+end_src
+
+We also make sure that only the freeform workspaces can be named.
+#+begin_src haskell
+renameWorkspace' :: XPConfig -> X ()
+renameWorkspace' prompt = withCurrentWorkspace $ \ws ->
+  when (not (ws `member` myPredefinedWorkspaces))
+    (renameWorkspace prompt)
+#+end_src
+
+We also provide a utility action to remove the workspace name
+#+begin_src haskell
+removeCurrentWorkspaceName :: X ()
+removeCurrentWorkspaceName = setCurrentWorkspaceName ""
+#+end_src
+
+We include these actions in =workspaceKeys= to use them.
+
+** Groups
 * Config
 #+begin_src haskell
 myConfig = def
@@ -835,6 +881,7 @@ myKeys = concat
   [ xmonadControlKeys
   , applicationKeys
   , infoKeys
+  , workspaceKeys
   ]
 #+end_src
 
@@ -880,6 +927,14 @@ infoKeys = return $ spawnKeymap "M-i" info
            ]
 #+end_src
 
+*** Workspace keys
+Keys for managing workspaces
+#+begin_src haskell
+workspaceKeys =
+  [ ("M-r"  , renameWorkspace' renamePrompt)
+  , ("M-S-r", removeCurrentWorkspaceName)
+  ]
+#+end_src
 ** Mouse bindings
 Let's keep this empty for now. The default behaviour of making windows floating when dragged around is really irritating.
 #+begin_src haskell
