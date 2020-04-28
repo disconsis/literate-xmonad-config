@@ -44,6 +44,21 @@ Not sure how to fix it though. The fact that they work in whichkey is really sur
 
 ** TODO Try to speed up message passing between client and server     :hard:
 This is the cause of the ~1s taken for window switching from the status bar.
+** IDEA Predefined task setups
+This extends the ideas of [[Workspace-aware browser launcher]].
+A bunch of "tasks" could be predefined which always need some applications open at the start, maybe along with positions, layout.
+#+begin_example
+Grading -> Gradescope, gmail, ...
+XMonad -> Emacs, hackage, ...
+Homework -> Emacs, hw pdf ...
+#+end_example
+
+An XPrompt could then prompt for which task to setup from amongst them.
+
+For extra points, it could use the currently open ones to define a new one.
+This would require storage in another format, which is not a big deal.
+What is a big deal is figuring out how to start them - i.e. the program name from the window.
+Browser tabs also complicate things - not sure if there is a way to query which ones are open in a specific window.
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
