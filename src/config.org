@@ -580,23 +580,28 @@ server to switch to the workspace clicked on and include it in our pretty printe
 This function needs to be the first to run on the workspace name, since it needs access to the unaltered
 name to switch to it. It should also pad the name so that it's easy to click.
 #+begin_src haskell
-workspaceSwitcher :: WorkspaceIdT -> Text
+workspaceSwitcher :: WorkspaceIdT -> Text -> Text
 workspaceSwitcher workspace =
-  lemonbarFormat [Action LeftClick switchCommand] . pad $ workspace
+  lemonbarFormat [Action LeftClick switchCommand] . pad
   where
     switchCommand = format1 "bin/launch client switch '{}'" workspace
 #+end_src
 
-Since it needs to be applied in a bunch of places, we create a function to transform a pretty-printer to use it.
+** Workspace names
+We use =X.A.WorkspaceNames= to show the custom names set on each workspace.
+While the =WorkspaceNames= provides a function to modify a =PP= to use show these names automatically, it creates
+problems with composability since it needs the first access to the real workspace name (similar to =workspaceSwitcher=).
+Thus we change it to take a workspace name and produce a text modifier.
+
 #+begin_src haskell
-workspaceSwitcheroo :: PPText -> PPText
-workspaceSwitcheroo ppt@PPText{..} = ppt
-  { pptCurrent = pptCurrent . workspaceSwitcher
-  , pptVisible = pptVisible . workspaceSwitcher
-  , pptHidden = pptHidden . workspaceSwitcher
-  , pptHiddenNoWindows = pptHiddenNoWindows . workspaceSwitcher
-  , pptVisibleNoWindows = fmap (. workspaceSwitcher) pptVisibleNoWindows
-  }
+workspaceNamer :: X (WorkspaceIdT -> Text -> Text)
+workspaceNamer = do
+  names <- getWorkspaceNames'
+  let namesT ws = ws |> toString |> names |>> toText
+  return $ \ws ->
+    case namesT ws of
+      Nothing -> id
+      Just name -> (<> ":" <> name)
 #+end_src
 
 ** Pretty-printing
@@ -685,15 +690,46 @@ basicPP = def
     layoutFirstOrder other = other
 #+end_src
 
+
+When using multiple PP modifiers that need access to the real workspace name, we need a function to supply it to them.
+This requires the modifier functions to be changed to accept an additional workspace argument.
+We make sure that the modifier functions are applied in the same order as provided in the list to main intuitiveness.
+#+begin_src haskell
+withRealWorkspaceName :: [X (WorkspaceIdT -> Text -> Text)] -> PPText -> X PPText
+withRealWorkspaceName modifiers ppt@PPText{..} = do
+  mod <- finalModifier
+  pure $ ppt
+   { pptCurrent = pptCurrent . mod
+   , pptVisible = pptVisible . mod
+   , pptHidden = pptHidden . mod
+   , pptUrgent = pptUrgent . mod
+   , pptHiddenNoWindows = pptHiddenNoWindows . mod
+   , pptVisibleNoWindows = fmap (. mod) pptVisibleNoWindows
+   }
+  where
+    modifiers' = reverse modifiers
+
+    finalModifier :: X (Text -> Text)
+    finalModifier = do
+      mods <- sequence modifiers'
+      pure \ws ->
+        mods
+        |> fmap ($ ws)
+        |> foldr (.) id
+        |> ($ ws)
+#+end_src
+
 This is the one that finally gets applied.
 #+begin_src haskell
 chosenPP :: (X PP, X PP)
 chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
-         |> bimapBoth
-              (  workspaceSwitcheroo
-              .> ppTextToString
-              .> workspaceNamesPP
-              )
+           |> bimapBoth (withRealWorkspaceName
+                           [ workspaceNamer
+                           , workspaceSwitcher'
+                           ])
+           |> bimapBoth (fmap ppTextToString)
+  where
+   workspaceSwitcher' = pure workspaceSwitcher
 #+end_src
 
 *** one-dark
@@ -833,10 +869,7 @@ myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaces
 Naming workspaces helps immensely in identifying them just from the status bar, and thus managing them.
 This only makes sense for freeform workspaces though.
 
-We use =X.A.WorkspaceNames= for this.
-=workspaceNamesPP= from that module makes a pretty-printer print the workspace names.
-
-We also need a prompt for reading the workspace name with =renameWorkspace=.
+We need a prompt for reading the workspace name with =renameWorkspace=.
 Let's just use the default for the time being.
 #+begin_src haskell
 renamePrompt :: XPConfig
