@@ -1,4 +1,4 @@
-.PHONY: build test
+.PHONY: build test ghcid
 
 
 build: src/config.org xmonad-config.cabal
@@ -7,3 +7,8 @@ build: src/config.org xmonad-config.cabal
 test:
 				make build
 				bin/test
+
+ghcid:
+				ghcid --restart=src/config.org \
+					  --restart=xmonad-config.cabal \
+					  --command="ntangle src/config.org; stack repl"
