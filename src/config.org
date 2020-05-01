@@ -176,6 +176,11 @@ Provide graphical prompts
 import XMonad.Prompt
 #+end_src
 
+Move the mouse to where you want it
+#+begin_src haskell
+import qualified XMonad.Actions.Warp as Warp
+#+end_src
+
 * Utils
 Some utility functions to make life easy
 #+begin_src haskell
@@ -231,7 +236,11 @@ X accessors
 #+begin_src haskell
 withCurrentWorkspace :: (WorkspaceId -> X ()) -> X ()
 withCurrentWorkspace action =
-  withWindowSet (W.current .> W.workspace .> W.tag .> action)
+  withWindowSet (W.currentTag .> action)
+
+withCurrentScreen :: (ScreenId -> X ()) -> X ()
+withCurrentScreen action =
+  withWindowSet (W.current .> W.screen .> action)
 #+end_src
 * Markup(s)
 Define interfaces for markup languages used later.
@@ -862,7 +871,10 @@ myPredefinedWorkspaces =
 myWorkspaceStrings :: [String]
 myWorkspaceStrings = snd <$> myWorkspaces
 
-myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaces
+myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaceStrings
+
+isPredefinedWorkspace :: WorkspaceId -> Bool
+isPredefinedWorkspace ws = ws `member` myPredefinedWorkspaces
 #+end_src
 
 ** Naming
@@ -880,7 +892,7 @@ We also make sure that only the freeform workspaces can be named.
 #+begin_src haskell
 renameWorkspace' :: XPConfig -> X ()
 renameWorkspace' prompt = withCurrentWorkspace $ \ws ->
-  when (not (ws `member` myPredefinedWorkspaces))
+  unless (isPredefinedWorkspace ws)
     (renameWorkspace prompt)
 #+end_src
 
@@ -980,12 +992,47 @@ infoKeys = return $ spawnKeymap "M-i" info
 
 *** Workspace keys
 Keys for managing workspaces
+
+When changing focus to a workspace on a multi-monitor setup, it's rare that you want to keep the cursor in the previous position; so we put it in the middle of the screen.
 #+begin_src haskell
-workspaceKeys =
+placeCursorMiddle = withCurrentScreen \screen ->
+  Warp.warpToScreen screen (1/2) (1/2)
+#+end_src
+
+I find the behaviour of =StackSet.view= a lot more intuitive than =StackSet.greedyView= - the unexpected workspace swapping is a bit jarring.
+Thus we arrive at a workspace view action:
+#+begin_src haskell
+viewWorkspace ws = do
+  windows (W.view ws)
+  placeCursorMiddle
+#+end_src
+
+Shifting a window to another workspace should have similar behaviour.
+#+begin_src haskell
+viewShift ws = do
+  windows (W.shift ws)
+  viewWorkspace ws
+#+end_src
+
+Swapping a workspace is sometimes a necessary evil; it's mostly required when there's a lot of workspaces and you need to manually reorder them according to some idea of similarity.
+As such, it facilitates the manual ordering of workspaces that I would rather get rid of in other ways (viz. workspace groups); thus I do not include it in the keys.
+If someone wants it, =X.A.WorkspaceNames.swapWithCurrent= is your friend :)
+
+So finally, the keys are:
+#+begin_src haskell
+workspaceKeys = viewKeys ++ shiftKeys ++
   [ ("M-r"  , renameWorkspace' renamePrompt)
   , ("M-S-r", removeCurrentWorkspaceName)
   ]
+  where
+    workspaceFun :: String -> (WorkspaceId -> X ()) -> [(String, X ())]
+    workspaceFun prefix action =
+      first (prefix <>) . second action <$> myWorkspacesWithKeys
+
+    viewKeys  = workspaceFun "M-"   viewWorkspace
+    shiftKeys = workspaceFun "M-S-" viewShift
 #+end_src
+
 ** Mouse bindings
 Let's keep this empty for now. The default behaviour of making windows floating when dragged around is really irritating.
 #+begin_src haskell
