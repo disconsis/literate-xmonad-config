@@ -46,7 +46,8 @@ Not sure how to fix it though. The fact that they work in whichkey is really sur
 This is the cause of the ~1s taken for window switching from the status bar.
 ** IDEA Predefined task setups
 This extends the ideas of [[Workspace-aware browser launcher]].
-A bunch of "tasks" could be predefined which always need some applications open at the start, maybe along with positions, layout.
+A bunch of "tasks" could be predefined which always need some applications open at the start, maybe along with
+positions, layout.
 #+begin_example
 Grading -> Gradescope, gmail, ...
 XMonad -> Emacs, hackage, ...
@@ -222,7 +223,8 @@ infixl 0 |>>
 x |>> f = x |> fmap f
 #+end_src
 
-XMonad installs =SIGCHLD= and =SIGPIPE= handlers which ignore these signals. This causes issues with some programs, like =stack build=.
+XMonad installs =SIGCHLD= and =SIGPIPE= handlers which ignore these signals. This causes issues with some programs,
+like =stack build=.
 #+begin_src haskell
 withoutSignalHandlers :: X a -> X a
 withoutSignalHandlers action = do
@@ -301,7 +303,8 @@ lemonbarFormatOne fmt = case fmt of
   (Overline color)        -> wrap (bracket (format1 "o{}" color) <> bracket "+o") (bracket "-o")
   (Font index)            -> wrap (bracket (format1 "T{}" index)) (bracket "T-")
   (Offset size)           -> (bracket (format1 "O{}" size) <>)
-  (Action button cmd)     -> wrap (bracket (format "A{}:{}:" (fromMouseButton button, (escape ':' cmd)))) (bracket "A")
+  (Action button cmd)     -> wrap (bracket (format "A{}:{}:" (fromMouseButton button, (escape ':' cmd))))
+                                  (bracket "A")
   where
     bracket = wrap "%{" "}"
     escape char =
@@ -353,7 +356,8 @@ As an example, let this be your config:
 #+end_example
 
 =NamedActions= would provide a help bindings (such as "F1") that you could hit to see all of these at once.
-In contrast, this implementation of =which-key= does not provide a help binding, but you could hit ~C-i~ (say) and the help for keys which /complete/ C-i bindings would pop up after a delay (say, 2 seconds).
+In contrast, this implementation of =which-key= does not provide a help binding, but you could hit ~C-i~ (say) and the help
+for keys which /complete/ C-i bindings would pop up after a delay (say, 2 seconds).
 That would look like this:
 #+begin_example
 f -> info foo
@@ -374,7 +378,7 @@ displayTextSync time text = io . void $ readProcess "dzen2"
   (("-p" : timeArg) ++
    [ "-l", show numLines
    , "-ta", "c" , "-sa", "c"
-   , "-e", "onstart=uncollapse"                  -- show all lines at startup (by default they only show on mouse hover)
+   , "-e", "onstart=uncollapse"                 -- show all lines at startup (by default they only show on mouse hover)
    , "-fn", displayTextFont
    ])
   (toString text)
@@ -393,10 +397,12 @@ displayTextSyncForever = displayTextSync Nothing
 displayTextForever = displayText Nothing
 #+end_src
 
-We then need a pretty-printer for displaying the keybindings. The =NamedActions= module has functions for naming and printing keybindings, but unfortunately it's too restrictive and doesn't allow any customization. I realized that
+We then need a pretty-printer for displaying the keybindings. The =NamedActions= module has functions for naming and
+printing keybindings, but unfortunately it's too restrictive and doesn't allow any customization. I realized that
 I don't require much of that functionality, and the provided pretty-printer is kind of ugly.
 Let's define our own the pretty-printer first.
-I'm using =equalizeLeft= and =equalizeRight= since we're using center-aligning in =dzen=, so the lines need to be of equal length to match up.
+I'm using =equalizeLeft= and =equalizeRight= since we're using center-aligning in =dzen=, so the lines need to be of equal
+length to match up.
 #+begin_src haskell
 data WhichkeyConfig
   = WhichkeyConfig
@@ -440,9 +446,11 @@ whichkeyShowBindings WhichkeyConfig{keyFg, descFg} keybinds =
 #+end_src
 
 Like emacs' =which-key=, the help message should activate after a delay and close by itself if any key is pressed.
-Let's define a custom submap function for that. For the reasons stated above, I'm using simple strings instead of the =NamedActions= module here.
+Let's define a custom submap function for that. For the reasons stated above, I'm using simple strings instead of the
+=NamedActions= module here.
 See [[opening-apps]] for a usage example.
-*NOTE*: this might cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue, since these submaps typically won't use the mod key.
+*NOTE*: this might cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue,
+since these submaps typically won't use the mod key.
 #+begin_src haskell
 whichkeySubmap :: (LayoutClass l Window, Read (l Window))
                => WhichkeyConfig
@@ -462,12 +470,14 @@ whichkeySubmap whichkeyConf config keybinds = do
 Using =X.H.ServerMode= allows us to control XMonad externally.
 This allows for executing commands from the status bar, external prompts like =albert= etc.
 
-=ServerMode='s actions are of the type =X ()=. This prevents them from taking any input, which reduces its usability (eg. for switching workspaces, the workspace name needs to be taken as input).
+=ServerMode='s actions are of the type =X ()=. This prevents them from taking any input, which reduces its usability
+(eg. for switching workspaces, the workspace name needs to be taken as input).
 There's two ways to solve this:
 1. Create a different listener for each command that needs an input.
 2. Take the first word as the name of the command and the rest as arguments.
 
-The second solution has an implicit failure state (when the input string is empty), but probably much less wasteful. This is the one that's used here. We enforce that the string is not empty through the command-line parser.
+The second solution has an implicit failure state (when the input string is empty), but probably much less wasteful.
+This is the one that's used here. We enforce that the string is not empty through the command-line parser.
 
 ** Client
 We first write the client which can send commands to the server.
@@ -541,13 +551,15 @@ serverEnable config@XConfig{handleEventHook} = config
 #+end_src
 
 *** Switch workspaces
-While the staple =StackSet.view= and =StackSet.greedyView= work well enough for the server's ="switch"= action, it has some unintuitive behaviour in case of multiple monitors.
+While the staple =StackSet.view= and =StackSet.greedyView= work well enough for the server's ="switch"= action, it has
+some unintuitive behaviour in case of multiple monitors.
 Imagine there are two monitors and you click the workspace button on the status bar on the unfocused monitor -
 this would activate the workspace on the active monitor, which is not the desired behaviour.
 If the workspace you click on is the one that's focused on the foucsed monitor, then you probably want that
 workspace to be focused on this monitor.
 In both cases, the monitor the cursor is on is the one that's expected to be focused, so we should do this first.
-Then, as seen in the second case, we should always put the selected workspace on this monitor, so we should use =greedyView= rather than =view=.
+Then, as seen in the second case, we should always put the selected workspace on this monitor, so we should use
+=greedyView= rather than =view=.
 
 Accordingly, first, an action to focus the workspace the cursor is on.
 #+begin_src haskell
@@ -576,10 +588,14 @@ Aside from the actual choice of bar, there are things I want from a status bar:
 
 The first of these requirements is pretty standard, and can be achieved using some =lemonbar= markup that Polybar uses.
 
-The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved with =X.H.EwmhDesktops=.
-The other option is to use =X.H.ServerMode= which allows us to call arbitrary actions from the bar, like changing the layout.
-This is slightly more complicated, but should be worth it for the extensibility. This is the option used here.
-A major downside of this approach is that it is slow - taking up to a second sometimes. Some logging reveals that the message passing is the bottleneck, and there isn't much that can be done about that. Switching to the =xdotool= approach is thus quite attractive, but has the downside that the action that can be taken is much simpler (equivalent to a =StackSet.view=) and somewhat unintuitive. Since I don't use this too much, I'll let this be for now.
+The second can be achieved with =xdotool set_desktop <workspace>=. This requires EWMH compliance which can be achieved
+with =X.H.EwmhDesktops=.
+The other option is to use =X.H.ServerMode= which allows us to call arbitrary actions from the bar, like changing the
+layout. This is slightly more complicated, but should be worth it for the extensibility. This is the option used here.
+A major downside of this approach is that it is slow - taking up to a second sometimes. Some logging reveals that the
+message passing is the bottleneck, and there isn't much that can be done about that. Switching to the =xdotool= approach
+is thus quite attractive, but has the downside that the action that can be taken is much simpler (equivalent to a
+=StackSet.view=) and somewhat unintuitive. Since I don't use this too much, I'll let this be for now.
 
 The third and fourth can be achieved with =X.H.DynamicBars=.
 
@@ -599,7 +615,7 @@ workspaceSwitcher workspace =
 ** Workspace names
 We use =X.A.WorkspaceNames= to show the custom names set on each workspace.
 While the =WorkspaceNames= provides a function to modify a =PP= to use show these names automatically, it creates
-problems with composability since it needs the first access to the real workspace name (similar to =workspaceSwitcher=).
+problems with composability since it needs the first access to the real workspace name (similar to =workspaceSwitcher=)
 Thus we change it to take a workspace name and produce a text modifier.
 
 #+begin_src haskell
@@ -700,7 +716,7 @@ basicPP = def
 #+end_src
 
 
-When using multiple PP modifiers that need access to the real workspace name, we need a function to supply it to them.
+When using multiple PP modifiers that need access to the real workspace name, we need a function to supply it to them
 This requires the modifier functions to be changed to accept an additional workspace argument.
 We make sure that the modifier functions are applied in the same order as provided in the list to main intuitiveness.
 #+begin_src haskell
@@ -747,7 +763,8 @@ onedarkFocusedPP :: PPText
 onedarkFocusedPP = basicPP
   { pptCurrent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkGreen, Underline onedarkGreenDarker ]
   , pptVisible = lemonbarFormat [ Foreground onedarkGreen, Background onedarkGrey, Underline onedarkGreen ]
-  , pptVisibleNoWindows = Just $ lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ]
+  , pptVisibleNoWindows = Just $
+      lemonbarFormat [ Foreground onedarkBlack, Background onedarkGrey, Underline onedarkGreen ]
   , pptHidden = lemonbarFormat [ Foreground onedarkGreen, Underline onedarkGreen ]
   , pptHiddenNoWindows = lemonbarFormat [ Foreground onedarkGrey ]
   , pptUrgent = lemonbarFormat [ Foreground onedarkBlack, Background onedarkRed ]
@@ -765,10 +782,11 @@ onedarkUnfocusedPP = onedarkFocusedPP
 #+end_src
 
 ** Dynamic bar highlighting and management
-=DynamicBars= asks for a bar startup function of the type =ScreenId -> IO Handle=, where =ScreenId= is simply a newtype for =Int=.
-On the other hand, Polybar requires an xrandr monitor name to know which screen to use. So first we need a mapping between the two.
-I simply use =xrandr= to query which monitors are active and hope to dear god that they are in the same order as the =ScreenId='s.
-So far I have not been let down.
+=DynamicBars= asks for a bar startup function of the type =ScreenId -> IO Handle=, where =ScreenId= is simply a newtype for
+=Int=. On the other hand, Polybar requires an xrandr monitor name to know which screen to use. So first we need a
+mapping between the two.
+I simply use =xrandr= to query which monitors are active and hope to dear god that they are in the same order as the
+=ScreenId='s. So far I have not been let down.
 #+begin_src haskell
 monitorIds :: IO [(ScreenId, Text)]
 monitorIds = do
@@ -783,10 +801,11 @@ monitorIds = do
       return (S id, monitor)
 #+end_src
 
-We want to use =spawnPipe= to start polybar and pass input to its stdin, but unfortunately polybar doesn't read from there.
-So we need to use an intermediary to pass it into polybar through a named pipe. We /could/ do this from xmonad itself, but then
-we have to maintain consistency between xmonad and polybar about the name of the pipe. That, and using named pipes in haskell
-turns out to have a lot of gotchas. We do this through a shell script =polybar-start-monitor.sh=
+We want to use =spawnPipe= to start polybar and pass input to its stdin, but unfortunately polybar doesn't read from
+there. So we need to use an intermediary to pass it into polybar through a named pipe. We /could/ do this from xmonad
+itself, but then we have to maintain consistency between xmonad and polybar about the name of the pipe. That, and
+using named pipes in haskell turns out to have a lot of gotchas.
+We do this through a shell script =polybar-start-monitor.sh=
 
 The relevant polybar module just reads a the passed environment variable =STDINFIFO=
 #+begin_src conf :tangle no
@@ -827,13 +846,16 @@ polybarEnable config@XConfig{..}  = docks $ config
 
 * Workspaces
 ** Static & Freeform
-Static workspaces - each one dedicated to a specific purpose - is often too restrictive. However, having a few with predefined purposes (todos, music, messaging etc.) makes it easy to manage and switch to them. In the past, I've worked with 12 workspaces - 7 of them free-form and 5 predefined. This worked quite well.
+Static workspaces - each one dedicated to a specific purpose - is often too restrictive. However, having a few with
+predefined purposes (todos, music, messaging etc.) makes it easy to manage and switch to them. In the past, I've
+worked with 12 workspaces - 7 of them free-form and 5 predefined. This worked quite well.
 #+begin_src haskell
 data WorkspaceType = Predefined | Freeform
   deriving (Eq, Ord, Show)
 #+end_src
 
-Finally, we set the names for the predefined workspaces. Here these are fontawesome unicode names which /should/ indicate their purpose.
+Finally, we set the names for the predefined workspaces.
+Here these are fontawesome unicode names which /should/ indicate their purpose.
 #+begin_src haskell
 wsTodo  = "\xf00b"
 wsConf  = "\xf992"
@@ -964,7 +986,8 @@ xmonadControlKeys =
 #+end_src
 
 *** Opening applications
-Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~, but it's faster to have some shortcuts for commonly used apps.
+Keys for well, opening applications. Most things can be accessed through the smart launcher =albert= through ~M-o~,
+but it's faster to have some shortcuts for commonly used apps.
 #+name: opening-apps
 #+begin_src haskell
 applicationKeys = return $ spawnKeymap "M-u" apps
@@ -993,14 +1016,15 @@ infoKeys = return $ spawnKeymap "M-i" info
 *** Workspace keys
 Keys for managing workspaces
 
-When changing focus to a workspace on a multi-monitor setup, it's rare that you want to keep the cursor in the previous position; so we put it in the middle of the screen.
+When changing focus to a workspace on a multi-monitor setup, it's rare that you want to keep the cursor in the
+previous position; so we put it in the middle of the screen.
 #+begin_src haskell
 placeCursorMiddle = withCurrentScreen \screen ->
   Warp.warpToScreen screen (1/2) (1/2)
 #+end_src
 
-I find the behaviour of =StackSet.view= a lot more intuitive than =StackSet.greedyView= - the unexpected workspace swapping is a bit jarring.
-Thus we arrive at a workspace view action:
+I find the behaviour of =StackSet.view= a lot more intuitive than =StackSet.greedyView= - the unexpected workspace
+swapping is a bit jarring. Thus we arrive at a workspace view action:
 #+begin_src haskell
 viewWorkspace ws = do
   windows (W.view ws)
@@ -1014,9 +1038,10 @@ viewShift ws = do
   viewWorkspace ws
 #+end_src
 
-Swapping a workspace is sometimes a necessary evil; it's mostly required when there's a lot of workspaces and you need to manually reorder them according to some idea of similarity.
-As such, it facilitates the manual ordering of workspaces that I would rather get rid of in other ways (viz. workspace groups); thus I do not include it in the keys.
-If someone wants it, =X.A.WorkspaceNames.swapWithCurrent= is your friend :)
+Swapping a workspace is sometimes a necessary evil; it's mostly required when there's a lot of workspaces and you
+need to manually reorder them according to some idea of similarity. As such, it facilitates the manual ordering of
+workspaces that I would rather get rid of in other ways (viz. workspace groups); thus I do not include it in the
+keys. If someone wants it, =X.A.WorkspaceNames.swapWithCurrent= is your friend :)
 
 So finally, the keys are:
 #+begin_src haskell
@@ -1034,7 +1059,8 @@ workspaceKeys = viewKeys ++ shiftKeys ++
 #+end_src
 
 ** Mouse bindings
-Let's keep this empty for now. The default behaviour of making windows floating when dragged around is really irritating.
+Let's keep this empty for now. The default behaviour of making windows floating when dragged around is really
+irritating.
 #+begin_src haskell
 myMouseBindings :: XConfig Layout -> Map (ButtonMask, Button) (Window -> X ())
 myMouseBindings config = fromList []
@@ -1042,7 +1068,8 @@ myMouseBindings config = fromList []
 
 ** Startup actions
 First thing we should do is check our keybindings for errors and duplicates.
-The =return ()= is neccessary to add some lazinesss to prevent the infinite loop of =myConfig -> myStartupHook -> myConfig -> ...= (see the docs for [[https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-EZConfig.html#v:checkKeymap][checkKeymap]] for more details)
+The =return ()= is neccessary to add some lazinesss to prevent the infinite loop of
+=myConfig -> myStartupHook -> myConfig -> ...= (see the docs for [[https://hackage.haskell.org/package/xmonad-contrib-0.16/docs/XMonad-Util-EZConfig.html#v:checkKeymap][checkKeymap]] for more details)
 The default cursor is also... not the best - change it to something more standard.
 #+begin_src haskell
   myStartupHook :: X ()
@@ -1077,8 +1104,9 @@ restartConfig resume =
 #+end_src
 
 ** Logging
-There's two ways to view xmonad logs. Either you set =exec <xmonad executable>= in your =.xinitrc= and redirect the logs of your X session with =startx &> <logfile>=.
-The other, cleaner way, is to tell hardcode the path in =xmonad= itself. This way you're free to start your session however and not capture /all/ the logs.
+There's two ways to view xmonad logs. Either you set =exec <xmonad executable>= in your =.xinitrc= and redirect the logs
+of your X session with =startx &> <logfile>=. The other, cleaner way, is to tell hardcode the path in =xmonad= itself.
+This way you're free to start your session however and not capture /all/ the logs.
 
 This [[https://www.reddit.com/r/xmonad/comments/cr0ry3/viewing_stderr_from_stack_config/exkkmie/][code]] accomplishes this, courtesy of [[https://www.reddit.com/user/simonfxr/][u/simonfixr]].
 #+begin_src haskell
@@ -1179,3 +1207,7 @@ Finally, we run the parser and interpret the result.
 main :: IO ()
 main = parseArguments >>= runExecutable
 #+end_src
+
+# Local Variables:
+# fill-column: 120
+# End:
