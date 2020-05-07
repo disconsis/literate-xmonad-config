@@ -109,6 +109,7 @@ Some utilities from =xmonad-contrib=
 #+begin_src haskell
 import XMonad.Util.Run
 import XMonad.Layout.LayoutModifier (ModifiedLayout)
+import XMonad.Util.Types
 #+end_src
 
 =EZConfig= for emacs-style keybinding descriptions
@@ -180,6 +181,12 @@ import XMonad.Prompt
 Move the mouse to where you want it
 #+begin_src haskell
 import qualified XMonad.Actions.Warp as Warp
+#+end_src
+
+Add/remove window decorations
+#+begin_src haskell
+import XMonad.Layout.Decoration
+import XMonad.Layout.NoBorders
 #+end_src
 
 * Utils
@@ -926,7 +933,77 @@ removeCurrentWorkspaceName = setCurrentWorkspaceName ""
 
 We include these actions in =workspaceKeys= to use them.
 
-** Groups
+** TODO Groups
+* Layouts
+** Tab bar decorations
+Tab bar decorations look cleaner than borders in a lot of layouts.
+The existing solutions for this are =X.L.TabBarDecoration= and =X.L.Tabbed=.
+However, both of them have their downsides:
+- =TabBarDecoration=: Can only be applied on top or bottom (not left or right).
+                    Cannot be made smart (in the sense of =smartBorders=).
+- =Tabbed=: This module is more for using a tabbed sublayout in another layout rather than just the decoration.
+          While there is support for "smart" behaviour in this module, it doesn't work /quite/ like I'd hoped.
+          My misunderstanding is captured in this [[https://www.reddit.com/r/xmonad/comments/cm8pt4/addtabs_doesnt_show_tabs_with_tall/][post]].
+
+
+My decision was to write my own simple =DecorationStyle= for this - turned out it wasn't that hard.
+#+begin_src haskell
+data SmartTabDeco a = SmartTabDeco Direction2D
+  deriving (Eq, Show, Read)
+
+shrinkerUp    (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x (y + fi dh) w (h - fi dh)
+shrinkerDown  (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x y w (h - fi dh)
+shrinkerLeft  (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle (x + fi dw) y (w - fi dw) h
+shrinkerRight (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle x y (w - fi dw) h
+
+instance Eq a => DecorationStyle SmartTabDeco a where
+  shrink (SmartTabDeco direction) = case direction of
+    U -> shrinkerUp
+    D -> shrinkerDown
+    L -> shrinkerLeft
+    R -> shrinkerRight
+
+  pureDecoration (SmartTabDeco direction) decoWidth decoHeight _ _ windowRects currentWin@(_win, Rectangle x y w h)
+    | length windowRects >= 2 = Just $ smartTabBar
+    | otherwise               = Nothing
+    where
+      smartTabBar = case direction of
+        U -> Rectangle x y w decoHeight
+        D -> Rectangle x (y + fi (h - decoHeight)) w decoHeight
+        L -> Rectangle x y decoWidth h
+        R -> Rectangle (x + fi (w - decoWidth)) y decoWidth h
+#+end_src
+
+The tabs are probably going to be too small to show window titles, and it doesn't make sense in case of left and right tabs,
+we change the shrinker to not display any text.
+#+begin_src haskell
+data EmptyShrinker = EmptyShrinker
+  deriving (Read, Show)
+
+instance Shrinker EmptyShrinker where
+  shrinkIt _ _ = []
+#+end_src
+
+
+We use a simple function to add tabs and remove borders.
+#+begin_src haskell
+smartTabDeco direction theme tabWidth = noBorders . decoration shrinker theme' (SmartTabDeco direction)
+  where
+    shrinker = EmptyShrinker
+    theme' = theme { decoHeight = tabWidth, decoWidth = tabWidth }
+#+end_src
+
+** Tall layout
+#+begin_src haskell
+myTall =
+  smartTabDeco U def 10
+  $ Tall
+    { tallNMaster = 1
+    , tallRatioIncrement = 1/100
+    , tallRatio = 1/2
+    }
+#+end_src
+
 * Config
 #+begin_src haskell
 myConfig = def
@@ -936,6 +1013,7 @@ myConfig = def
   , mouseBindings   = myMouseBindings
   , startupHook     = myStartupHook
   , workspaces      = myWorkspaceStrings
+  , layoutHook      = myTall
   }
 #+end_src
 

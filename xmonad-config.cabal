@@ -47,3 +47,5 @@ executable xmonad
     , BlockArguments
     , ScopedTypeVariables
     , TupleSections
+    , FlexibleInstances
+    , MultiParamTypeClasses
