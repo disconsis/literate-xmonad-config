@@ -92,6 +92,7 @@ import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Function
+import Data.List (elemIndex)
 #+end_src
 
 Reverse application functions
@@ -187,6 +188,12 @@ Add/remove window decorations
 #+begin_src haskell
 import XMonad.Layout.Decoration
 import XMonad.Layout.NoBorders
+#+end_src
+
+Some layouts
+#+begin_src haskell
+import XMonad.Layout.Tabbed
+import XMonad.Layout.Simplest
 #+end_src
 
 * Utils
@@ -935,7 +942,11 @@ We include these actions in =workspaceKeys= to use them.
 
 ** TODO Groups
 * Layouts
+#+begin_src haskell
+myLayoutHook = myTall ||| myTabbed
+#+end_src
 ** Tab bar decorations
+*** Layouts like Tall
 Tab bar decorations look cleaner than borders in a lot of layouts.
 The existing solutions for this are =X.L.TabBarDecoration= and =X.L.Tabbed=.
 However, both of them have their downsides:
@@ -945,26 +956,28 @@ However, both of them have their downsides:
           While there is support for "smart" behaviour in this module, it doesn't work /quite/ like I'd hoped.
           My misunderstanding is captured in this [[https://www.reddit.com/r/xmonad/comments/cm8pt4/addtabs_doesnt_show_tabs_with_tall/][post]].
 
-
 My decision was to write my own simple =DecorationStyle= for this - turned out it wasn't that hard.
 #+begin_src haskell
-data SmartTabDeco a = SmartTabDeco Direction2D
+data SmartTabAddonDeco a = SmartTabAddonDeco Direction2D
   deriving (Eq, Show, Read)
 
-shrinkerUp    (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x (y + fi dh) w (h - fi dh)
-shrinkerDown  (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x y w (h - fi dh)
-shrinkerLeft  (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle (x + fi dw) y (w - fi dw) h
-shrinkerRight (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle x y (w - fi dw) h
+shrinkWinForDeco direction =  case direction of
+  U -> shrinkUp
+  D -> shrinkDown
+  L -> shrinkLeft
+  R -> shrinkRight
+  where
+    shrinkUp    (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x (y + fi dh) w (h - fi dh)
+    shrinkDown  (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x y w (h - fi dh)
+    shrinkLeft  (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle (x + fi dw) y (w - fi dw) h
+    shrinkRight (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle x y (w - fi dw) h
 
-instance Eq a => DecorationStyle SmartTabDeco a where
-  shrink (SmartTabDeco direction) = case direction of
-    U -> shrinkerUp
-    D -> shrinkerDown
-    L -> shrinkerLeft
-    R -> shrinkerRight
 
-  pureDecoration (SmartTabDeco direction) decoWidth decoHeight _ _ windowRects currentWin@(_win, Rectangle x y w h)
-    | length windowRects >= 2 = Just $ smartTabBar
+instance Eq a => DecorationStyle SmartTabAddonDeco a where
+  shrink (SmartTabAddonDeco direction) = shrinkWinForDeco direction
+
+  pureDecoration (SmartTabAddonDeco direction) decoWidth decoHeight _ _ windowRects currentWin@(_win, Rectangle x y w h)
+    | length windowRects >= 2 = Just smartTabBar
     | otherwise               = Nothing
     where
       smartTabBar = case direction of
@@ -974,8 +987,8 @@ instance Eq a => DecorationStyle SmartTabDeco a where
         R -> Rectangle (x + fi (w - decoWidth)) y decoWidth h
 #+end_src
 
-The tabs are probably going to be too small to show window titles, and it doesn't make sense in case of left and right tabs,
-we change the shrinker to not display any text.
+The tabs are probably going to be too small to show window titles, and it doesn't make sense in case of left and
+right tabs, we change the shrinker to not display any text.
 #+begin_src haskell
 data EmptyShrinker = EmptyShrinker
   deriving (Read, Show)
@@ -987,21 +1000,98 @@ instance Shrinker EmptyShrinker where
 
 We use a simple function to add tabs and remove borders.
 #+begin_src haskell
-smartTabDeco direction theme tabWidth = noBorders . decoration shrinker theme' (SmartTabDeco direction)
+smartTabAddonDeco direction theme tabWidth = noBorders . decoration shrinker theme' (SmartTabAddonDeco direction)
   where
     shrinker = EmptyShrinker
     theme' = theme { decoHeight = tabWidth, decoWidth = tabWidth }
 #+end_src
 
+*** Tabbed
+Originally I planned to only use my own decoration for layouts like =Tall= - where these decorations need to be
+displayed for all /visible/ windows. I was planning to use =X.L.Tabbed= for a tabbed layout and have it display its
+own decorations, where I like having the decorations pop up on the left with =tabbedLeft=. I expected that the
+decorations will fill up the entire height, however this turns out not to be the case (although I could swear this
+used to work like that in the past). The decorations take up only the size specified by =decoHeight= and =decoWidth=.
+So we need another custom decorator.
+
+It was hard to come up with a name that disambiguates this from the previous decorator.
+#+begin_src haskell
+data SmartTabbedDeco a = SmartTabbedDeco Direction2D
+  deriving (Eq, Read, Show)
+#+end_src
+
+The window shrinking logic should be the same as before.
+The decoration rectangle is also mostly the same. We decide whether to display one based on how many windows
+there are in the stack rather than the displayed ones (since =Tabbed= only displays one window at once) and divide
+the screen height/width into equal parts for each window decoration.
+#+begin_src haskell
+instance Eq a => DecorationStyle SmartTabbedDeco a where
+  shrink (SmartTabbedDeco direction) = shrinkWinForDeco direction
+
+  pureDecoration (SmartTabbedDeco direction) decoWidth decoHeight _ stack _ (currentWin, Rectangle x y w h)
+    | numWins >= 2 = Just smartTabBar
+    | otherwise    = Nothing
+    where
+      stackList = W.integrate stack
+      numWins = length stackList
+
+      smartTabBar = case direction of
+        U -> Rectangle (x + fi winIdx * fi splitWidth) y splitWidth decoHeight
+        D -> Rectangle (x + fi winIdx * fi splitWidth) (y + fi (h - decoHeight)) splitWidth decoHeight
+        L -> Rectangle x (y + fi winIdx * fi splitHeight) decoWidth splitHeight
+        R -> Rectangle (x + fi (w - decoWidth)) (y + fi winIdx * fi splitHeight) decoWidth splitHeight
+
+      splitHeight = h `div` fi numWins
+      splitWidth  = w `div` fi numWins
+      winIdx = fromMaybe 0 $ elemIndex currentWin stackList -- this should never be Nothing
+#+end_src
+
+A simple utility function to apply this decoration:
+#+begin_src haskell
+smartTabbedDeco direction theme tabWidth = noBorders . decoration EmptyShrinker theme' (SmartTabbedDeco direction)
+  where theme' = theme { decoHeight = tabWidth, decoWidth = tabWidth }
+#+end_src
+
+*** Theme(s)
+We use a single tab theme to stay consistent across layouts.
+Since the tab decoration is highlighted, there isn't a need for the border.
+#+begin_src haskell
+myTabTheme :: Theme
+myTabTheme = def
+  { activeColor         = activeColor
+  , activeBorderColor   = activeColor
+  , inactiveColor       = inactiveColor
+  , inactiveBorderColor = inactiveColor
+  , urgentColor         = urgentColor
+  , urgentBorderColor   = urgentColor
+  , decoHeight          = 5
+  , decoWidth           = 5
+  }
+  where
+   activeColor = toString onedarkBlue
+   inactiveColor = toString onedarkBlack
+   urgentColor = toString onedarkRed
+#+end_src
+
 ** Tall layout
 #+begin_src haskell
 myTall =
-  smartTabDeco U def 10
+  smartTabAddonDeco U myTabTheme 5
   $ Tall
     { tallNMaster = 1
     , tallRatioIncrement = 1/100
     , tallRatio = 1/2
     }
+#+end_src
+
+** Tabbed layout
+I wanted to use =X.L.Tabbed= here, but as described in [[Tab bar decorations/Tabbed]] section, its tab decorations do not
+span over the whole height in =tabbedLeft= and =tabbedRight=. The =Tabbed= layout is just a simple wrapper over =Simplest=
+that sets a decorator, so this should be more or less equivalent.
+#+begin_src haskell
+myTabbed =
+  smartTabbedDeco L myTabTheme 5
+  $ Simplest
 #+end_src
 
 * Config
@@ -1013,7 +1103,7 @@ myConfig = def
   , mouseBindings   = myMouseBindings
   , startupHook     = myStartupHook
   , workspaces      = myWorkspaceStrings
-  , layoutHook      = myTall
+  , layoutHook      = myLayoutHook
   }
 #+end_src
 
