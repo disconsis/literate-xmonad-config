@@ -60,6 +60,14 @@ For extra points, it could use the currently open ones to define a new one.
 This would require storage in another format, which is not a big deal.
 What is a big deal is figuring out how to start them - i.e. the program name from the window.
 Browser tabs also complicate things - not sure if there is a way to query which ones are open in a specific window.
+** Ethan Schoonover's XMonad demo
+[[https://youtu.be/70IxjLEmomg][youtube link]]
+There's a lot of good ideas here that I could (should) steal. I list some of those below.
+
+*** TODO Normal movement keys to move through the outer layout, special keys to move within
+He uses h-j-k-l to move through the outer layout, which behaves the same way as if without =subLayout=
+When on a sublayout, he uses special keys - eg. =C-;= to move through the tabs in a tabbed sublayout.
+
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
