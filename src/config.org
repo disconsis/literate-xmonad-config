@@ -1123,7 +1123,8 @@ myTabTheme = def
 ** Tall layout
 #+begin_src haskell
 myTall =
-  smartTabAddonDeco U myTabTheme 5
+  nameLayout "Tall"
+  $ smartTabAddonDeco U myTabTheme 5
   $ Tall
     { tallNMaster = 1
     , tallRatioIncrement = 1/100
@@ -1137,7 +1138,8 @@ span over the whole height in =tabbedLeft= and =tabbedRight=. The =Tabbed= layou
 that sets a decorator, so this should be more or less equivalent.
 #+begin_src haskell
 myTabbed =
-  smartTabbedDeco L myTabTheme 5
+  nameLayout "Tabbed"
+  $ smartTabbedDeco L myTabTheme 5
   $ Simplest
 #+end_src
 
@@ -1197,6 +1199,7 @@ Keys for restarting, recompiling, quitting (etc?) XMonad
 xmonadControlKeys =
   [ ("M-`", restartConfig True)
   , ("M-S-C-`", io exitSuccess)
+  , ("M-<Space>", sendMessage NextLayout)
   ]
 #+end_src
 
