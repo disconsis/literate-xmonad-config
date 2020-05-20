@@ -92,7 +92,7 @@ import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Function
-import Data.List (elemIndex)
+import Data.List (elemIndex, foldr1)
 #+end_src
 
 Reverse application functions
@@ -196,10 +196,16 @@ import XMonad.Layout.Tabbed
 import XMonad.Layout.Simplest
 #+end_src
 
+Setting layout names
+#+begin_src haskell
+import XMonad.Layout.Renamed
+#+end_src
+
 * Utils
 Some utility functions to make life easy
+
+Markup and logging
 #+begin_src haskell
--- markup & logging
 wrap :: Text -> Text -> Text -> Text
 wrap left right middle = left <> middle <> right
 
@@ -215,15 +221,23 @@ shorten maxlen text = case text `T.compareLength` maxlen of
 format fmt = TL.toStrict . F.format fmt
 format1 str item = format str (Only item)
 
--- parsing
-withInfo opts desc = info (helper <*> opts) $ progDesc desc
+#+end_src
 
--- three-tuples
+
+Parsing
+#+begin_src haskell
+withInfo opts desc = info (helper <*> opts) $ progDesc desc
+#+end_src
+
+Dealing with three-tuples
+#+begin_src haskell
 mapThd3 f (a,b,c) = (a,b, f c)
 dropSnd3 (a,b,c) = (a,c)
 dropThd3 (a,b,c) = (a,b)
+#+end_src
 
--- timing
+Measuring timings
+#+begin_src haskell
 logDuration :: MonadIO m => m a -> m a
 logDuration action = do
   startTime <- io getCurrentTime
@@ -231,10 +245,17 @@ logDuration action = do
   endTime <- io getCurrentTime
   putStrLn $ "Time taken: " ++ show (diffUTCTime endTime startTime)
   return result
+#+end_src
 
--- reverse function application
+Reverse function application for code "flow"
+#+begin_src haskell
 infixl 0 |>>
 x |>> f = x |> fmap f
+#+end_src
+
+Layout naming - the most common use of =X.L.Renamed=
+#+begin_src haskell
+nameLayout newName = renamed [Replace newName]
 #+end_src
 
 XMonad installs =SIGCHLD= and =SIGPIPE= handlers which ignore these signals. This causes issues with some programs,
@@ -466,8 +487,7 @@ See [[opening-apps]] for a usage example.
 *NOTE*: this might cause issues with the variable mod-key I have going on. Hopefully this won't be /too/ much of an issue,
 since these submaps typically won't use the mod key.
 #+begin_src haskell
-whichkeySubmap :: (LayoutClass l Window, Read (l Window))
-               => WhichkeyConfig
+whichkeySubmap :: WhichkeyConfig
                -> XConfig l
                -> [(Text, Text, X ())]
                -> X ()
@@ -846,16 +866,17 @@ polybarCleanup = do
 
 And then plumb everything together with =DynamicBars= and =ManageDocks= (to actually make space for the bar).
 #+begin_src haskell
-polybarEnable :: LayoutClass l Window
-              => XConfig l
-              -> XConfig (ModifiedLayout AvoidStruts l)
-polybarEnable config@XConfig{..}  = docks $ config
-  { startupHook     = startupHook      <+> dynStatusBarStartup polybarStartup polybarCleanup
-  , handleEventHook = handleEventHook  <+> dynStatusBarEventHook polybarStartup polybarCleanup
-  , logHook         = logHook          <+> multiPP' chosenPP
-  , layoutHook      = avoidStruts $ layoutHook
-  }
-  where multiPP' (pp1, pp2) = join $ multiPP <$> pp1 <*> pp2
+polybarEnable :: XConfig Layout -> XConfig Layout
+polybarEnable config@XConfig{..}  =
+  case layoutHook of
+    Layout layout ->
+      docks $ config
+        { startupHook     = startupHook      <+> dynStatusBarStartup polybarStartup polybarCleanup
+        , handleEventHook = handleEventHook  <+> dynStatusBarEventHook polybarStartup polybarCleanup
+        , logHook         = logHook          <+> multiPP' chosenPP
+        , layoutHook      = Layout $ avoidStruts $ layout
+        }
+        where multiPP' (pp1, pp2) = join $ multiPP <$> pp1 <*> pp2
 #+end_src
 
 * Workspaces
@@ -942,12 +963,38 @@ We include these actions in =workspaceKeys= to use them.
 
 ** TODO Groups
 * Layouts
+Since all layouts have different types, we wrap our layout choices in existentials to be able to keep them in a list.
+This enables different parts different parts of the config to pick up which layouts are in use without having to
+specify them in each place.
+NOTE: This should never be empty.
 #+begin_src haskell
-myLayoutHook = myTall ||| myTabbed
+myLayouts :: [Layout Window]
+myLayouts = [Layout myTall, Layout myTabbed]
 #+end_src
+
+** Launch using existential layouts
+We have to fold over the layouts to combine them into one.
+#+begin_src haskell
+myLayoutHook :: Layout Window
+myLayoutHook = foldr1 (\(Layout a) (Layout b) -> Layout (a ||| b)) myLayouts
+#+end_src
+
+=launch= doesn't accept an existential layout hook, so we must unwrap it to pass it.
+All config modifiers must also be specifically written to be of type =XConfig Layout -> XConfig Layout= instead of a
+general =XConfig l1 -> XConfig l2=. The modifiers are applied in the same order as they appear,
+so modifiers =[f_1, f_2, f_3]= would be applied as =f_3 (f_2 (f_1 config))=
+#+begin_src haskell
+launchWithModifications :: [XConfig Layout -> XConfig Layout] -> XConfig Layout -> IO ()
+launchWithModifications modifications config =
+  case layoutHook modifiedConfig of
+    Layout layoutHook' -> launch $ modifiedConfig { layoutHook = layoutHook' }
+  where modifiedConfig = foldr ($) config (reverse modifications)
+#+end_src
+
 ** Tab bar decorations
 *** Layouts like Tall
-Tab bar decorations look cleaner than borders in a lot of layouts.
+Tab bar decorations look cleaner than borders in a lot of layouts. It also makes it possible to easily tell which
+window is active without using gaps, since borders are shared between adjoining windows.
 The existing solutions for this are =X.L.TabBarDecoration= and =X.L.Tabbed=.
 However, both of them have their downsides:
 - =TabBarDecoration=: Can only be applied on top or bottom (not left or right).
@@ -1350,10 +1397,7 @@ parseArguments = execParser (mainParser `withInfo` "Interact with XMonad")
 We define the interpreters for each possible usage.
 #+begin_src haskell
 runXMonad config
-    = launch
-    $ polybarEnable
-    $ serverEnable
-    $ config
+    = launchWithModifications [polybarEnable, serverEnable] config
 
 runExecutable :: Executable -> IO ()
 runExecutable (XMonad { testing = False })

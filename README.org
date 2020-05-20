@@ -1,8 +1,9 @@
 #+TITLE: A literate XMonad config
 
 ** Features
-- WhichKey: then show completions after a delay if the keybinding is not complete
-- Polybar: Open, manage, and pretty-print  a highly-capable status bar
+- WhichKey: auto-display a popup of completing keybindings
+- Polybar: (almost) out-of-the-box configuration for polybar
+- Custom decorations: Smart tab bars instead of window borders
 
 ** Installation & Testing
 - =make build=: To generate source files from the org config and build them.
