@@ -980,7 +980,9 @@ myLayouts = [Layout myTall, Layout myTabbed]
 We have to fold over the layouts to combine them into one.
 #+begin_src haskell
 myLayoutHook :: Layout Window
-myLayoutHook = L.foldr1 (\(Layout a) (Layout b) -> Layout (a ||| b)) myLayouts
+myLayoutHook = L.foldr1 (\(Layout a) (Layout b) -> Layout (a ||| b)) myLayouts'
+  where myLayouts' | null myLayouts = [Layout Simplest]
+                   | otherwise      = myLayouts
 #+end_src
 
 =launch= doesn't accept an existential layout hook, so we must unwrap it to pass it.
