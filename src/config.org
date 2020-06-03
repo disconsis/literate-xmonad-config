@@ -68,6 +68,11 @@ There's a lot of good ideas here that I could (should) steal. I list some of tho
 He uses h-j-k-l to move through the outer layout, which behaves the same way as if without =subLayout=
 When on a sublayout, he uses special keys - eg. =C-;= to move through the tabs in a tabbed sublayout.
 
+** TODO Update prompts
+The default prompt looks really ugly.
+** TODO Find and fix space leaks, if any
+I haven't been paying attention to the space leaks due to laziness, so there's at least a few in this code.
+Use Neil Mitchell's [[https://neilmitchell.blogspot.com/2020/05/fixing-space-leaks-in-ghcide.html][technique]] for this. Should be goo
 * Imports
 Libraries for system IO actions
 #+begin_src haskell
