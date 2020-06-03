@@ -98,19 +98,14 @@ import Relude as R
 import Relude.Extra.Foldable1
 import Relude.Extra.Tuple
 import Relude.Extra.Bifunctor
-import Relude.Extra.Map (member, lookup)
+import qualified Relude.Extra.Map as M
 import qualified Relude.Unsafe as Unsafe
 import qualified Prelude as P
 import Data.Char
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Function
-import Data.List (elemIndex, foldr1)
-#+end_src
-
-Reverse application functions
-#+begin_src haskell
-import Flow
+import qualified Data.List as L
 #+end_src
 
 Base =XMonad= import(s)
@@ -233,7 +228,6 @@ shorten maxlen text = case text `T.compareLength` maxlen of
 
 format fmt = TL.toStrict . F.format fmt
 format1 str item = format str (Only item)
-
 #+end_src
 
 
@@ -260,12 +254,6 @@ logDuration action = do
   return result
 #+end_src
 
-Reverse function application for code "flow"
-#+begin_src haskell
-infixl 0 |>>
-x |>> f = x |> fmap f
-#+end_src
-
 Layout naming - the most common use of =X.L.Renamed=
 #+begin_src haskell
 nameLayout newName = renamed [Replace newName]
@@ -284,13 +272,16 @@ withoutSignalHandlers action = do
 
 X accessors
 #+begin_src haskell
-withCurrentWorkspace :: (WorkspaceId -> X ()) -> X ()
+withCurrentWorkspace :: (WorkspaceId -> X a) -> X a
 withCurrentWorkspace action =
-  withWindowSet (W.currentTag .> action)
+  withWindowSet (action . W.currentTag)
+
+currentWorkspace :: X WorkspaceId
+currentWorkspace = gets (W.currentTag . windowset)
 
 withCurrentScreen :: (ScreenId -> X ()) -> X ()
 withCurrentScreen action =
-  withWindowSet (W.current .> W.screen .> action)
+  withWindowSet (action . W.screen . W.current)
 #+end_src
 * Markup(s)
 Define interfaces for markup languages used later.
@@ -469,13 +460,13 @@ instance Default WhichkeyConfig where
 whichkeyShowBindings :: WhichkeyConfig -> [(Text, Text, X ())] -> [Text]
 whichkeyShowBindings WhichkeyConfig{keyFg, descFg} keybinds =
   keybinds
-  |>> dropThd3
-  |>> first capitalizeIfShift
-  |> unzip
-  |> bimap equalizeLeft equalizeRight
-  |> uncurry zip
-  |>> bimap (dzenFg keyFg) (dzenFg descFg)
-  |>> format "{} -> {}"
+  <&> dropThd3
+  <&> first capitalizeIfShift
+   &  unzip
+   &  bimap equalizeLeft equalizeRight
+   &  uncurry zip
+  <&> bimap (dzenFg keyFg) (dzenFg descFg)
+  <&> format "{} -> {}"
   where
     capitalizeIfShift keystr
       | "S-" `T.isPrefixOf` last3 = T.snoc (T.dropEnd 3 keystr) (toUpper lastChar)
@@ -575,7 +566,7 @@ Then we need to define a function to split the input and lookup the appropriate 
 #+begin_src haskell
 serverCallCommand :: Map String (String -> X ()) -> String -> X ()
 serverCallCommand commandMap input =
-  case lookup command commandMap of
+  case M.lookup command commandMap of
     Just action -> action input'
     Nothing     -> io $ hPutStrLn stderr $ printf "Command '%s' not found" command
   where
@@ -669,7 +660,7 @@ Thus we change it to take a workspace name and produce a text modifier.
 workspaceNamer :: X (WorkspaceIdT -> Text -> Text)
 workspaceNamer = do
   names <- getWorkspaceNames'
-  let namesT ws = ws |> toString |> names |>> toText
+  let namesT ws = ws & toString & names <&> toText
   return $ \ws ->
     case namesT ws of
       Nothing -> id
@@ -786,20 +777,20 @@ withRealWorkspaceName modifiers ppt@PPText{..} = do
       mods <- sequence modifiers'
       pure \ws ->
         mods
-        |> fmap ($ ws)
-        |> foldr (.) id
-        |> ($ ws)
+        & fmap ($ ws)
+        & foldr (.) id
+        & ($ ws)
 #+end_src
 
 This is the one that finally gets applied.
 #+begin_src haskell
 chosenPP :: (X PP, X PP)
 chosenPP = (onedarkFocusedPP, onedarkUnfocusedPP)
-           |> bimapBoth (withRealWorkspaceName
-                           [ workspaceNamer
-                           , workspaceSwitcher'
-                           ])
-           |> bimapBoth (fmap ppTextToString)
+           & bimapBoth (withRealWorkspaceName
+                          [ workspaceNamer
+                          , workspaceSwitcher'
+                          ])
+           & bimapBoth (fmap ppTextToString)
   where
    workspaceSwitcher' = pure workspaceSwitcher
 #+end_src
@@ -934,9 +925,9 @@ We then derive the rest we need.
 myPredefinedWorkspaces :: Set WorkspaceId
 myPredefinedWorkspaces =
   myWorkspaces
-  |> filter ((Predefined ==) . fst)
-  |>> snd
-  |> fromList
+   &  filter ((Predefined ==) . fst)
+  <&> snd
+   &  fromList
 
 myWorkspaceStrings :: [String]
 myWorkspaceStrings = snd <$> myWorkspaces
@@ -944,7 +935,7 @@ myWorkspaceStrings = snd <$> myWorkspaces
 myWorkspacesWithKeys = zip myWorkspaceKeys myWorkspaceStrings
 
 isPredefinedWorkspace :: WorkspaceId -> Bool
-isPredefinedWorkspace ws = ws `member` myPredefinedWorkspaces
+isPredefinedWorkspace ws = ws `M.member` myPredefinedWorkspaces
 #+end_src
 
 ** Naming
@@ -989,7 +980,7 @@ myLayouts = [Layout myTall, Layout myTabbed]
 We have to fold over the layouts to combine them into one.
 #+begin_src haskell
 myLayoutHook :: Layout Window
-myLayoutHook = foldr1 (\(Layout a) (Layout b) -> Layout (a ||| b)) myLayouts
+myLayoutHook = L.foldr1 (\(Layout a) (Layout b) -> Layout (a ||| b)) myLayouts
 #+end_src
 
 =launch= doesn't accept an existential layout hook, so we must unwrap it to pass it.
@@ -1103,7 +1094,7 @@ instance Eq a => DecorationStyle SmartTabbedDeco a where
 
       splitHeight = h `div` fi numWins
       splitWidth  = w `div` fi numWins
-      winIdx = fromMaybe 0 $ elemIndex currentWin stackList -- this should never be Nothing
+      winIdx = fromMaybe 0 $ L.elemIndex currentWin stackList -- this should never be Nothing
 #+end_src
 
 A simple utility function to apply this decoration:
