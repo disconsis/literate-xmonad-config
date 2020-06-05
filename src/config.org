@@ -1014,30 +1014,32 @@ My decision was to write my own simple =DecorationStyle= for this - turned out i
 data SmartTabAddonDeco a = SmartTabAddonDeco Direction2D
   deriving (Eq, Show, Read)
 
-shrinkWinForDeco direction =  case direction of
-  U -> shrinkUp
-  D -> shrinkDown
-  L -> shrinkLeft
-  R -> shrinkRight
+shrinkWinForDeco direction _deco@(Rectangle _ _ dw dh) _win@(Rectangle x y w h) =  case direction of
+  U -> Rectangle x  y' w  h'
+  D -> Rectangle x  y  w  h'
+  L -> Rectangle x' y  w' h
+  R -> Rectangle x  y  w' h
   where
-    shrinkUp    (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x (y + fi dh) w (h - fi dh)
-    shrinkDown  (Rectangle _ _ _ dh) (Rectangle x y w h) = Rectangle x y w (h - fi dh)
-    shrinkLeft  (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle (x + fi dw) y (w - fi dw) h
-    shrinkRight (Rectangle _ _ dw _) (Rectangle x y w h) = Rectangle x y (w - fi dw) h
+    x' = x + fi dw
+    y' = y + fi dh
+    w' = w - fi dw
+    h' = h - fi dh
 
 
 instance Eq a => DecorationStyle SmartTabAddonDeco a where
   shrink (SmartTabAddonDeco direction) = shrinkWinForDeco direction
 
-  pureDecoration (SmartTabAddonDeco direction) decoWidth decoHeight _ _ windowRects currentWin@(_win, Rectangle x y w h)
+  pureDecoration (SmartTabAddonDeco direction) decoWidth decoHeight _ _ windowRects _win@(_, Rectangle x y w h)
     | length windowRects >= 2 = Just smartTabBar
     | otherwise               = Nothing
     where
       smartTabBar = case direction of
-        U -> Rectangle x y w decoHeight
-        D -> Rectangle x (y + fi (h - decoHeight)) w decoHeight
-        L -> Rectangle x y decoWidth h
-        R -> Rectangle (x + fi (w - decoWidth)) y decoWidth h
+        U -> Rectangle x  y  w         decoHeight
+        D -> Rectangle x  y' w         decoHeight
+        L -> Rectangle x  y  decoWidth h
+        R -> Rectangle x' y  decoWidth h
+      y' = (y + fi (h - decoHeight))
+      x' = (x + fi (w - decoWidth))
 #+end_src
 
 The tabs are probably going to be too small to show window titles, and it doesn't make sense in case of left and
