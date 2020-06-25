@@ -14,4 +14,4 @@ sleep 2 # wait for windows to appear
 
 (kitty || urxvt || xterm) 1>/dev/null 2>&1 &
 
-stack run -- start --test $@ || true
+stack run -- start --test "$@" || true

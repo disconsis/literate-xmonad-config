@@ -7,7 +7,7 @@ if [ "$1" = "--quiet" ] || [ "$1" = "-q" ]; then
     QUIET=true
 fi
 
-function notify() {
+notify() {
     [ "$QUIET" = false ] && notify-send "$@"
 }
 
@@ -32,7 +32,7 @@ fi
 stack build
 status=$?
 
-if [[ $status -ne 0 ]]; then
+if [ $status -ne 0 ]; then
     notify --urgency=critical "XMonad" "Building failed!"
 else
     notify "XMonad" "Build successful"

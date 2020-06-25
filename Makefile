@@ -10,5 +10,5 @@ test:
 
 ghcid:
 				ghcid --restart=src/config.org \
-					  --restart=xmonad-config.cabal \
-					  --command="ntangle src/config.org; stack repl"
+					--restart=xmonad-config.cabal \
+					--command="ntangle src/config.org; stack repl"
