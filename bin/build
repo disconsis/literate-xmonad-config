@@ -11,10 +11,23 @@ function notify() {
     [ "$QUIET" = false ] && notify-send "$@"
 }
 
+die() {
+    notify "$@"
+    echo "$@" 1>&2
+    exit 1
+}
+
 
 # tangle the org file -- `ntangle` is much faster than the elisp implementation
 # see [[https://github.com/OrgTangle/ntangle]]
-ntangle src/config.org 1>/dev/null
+
+
+if [ -x "$(command -v ntangle)" ]; then
+    ntangle src/config.org 1>/dev/null
+else
+    die "[!] 'ntangle' is needed for the build process.
+[!] Please install it from https://github.com/OrgTangle/ntangle"
+fi
 
 stack build
 status=$?

@@ -10,5 +10,14 @@
 - =make test=: Test the config in a new window. This changes the =mod= key to Win instead of Alt.
 - =stack run=: Run XMonad
 
+*** Dependencies
+Building:
+- [[https://docs.haskellstack.org/en/stable/install_and_upgrade/][stack]]
+- [[https://github.com/OrgTangle/ntangle][ntangle]]
+
+Testing:
+- [[https://www.freedesktop.org/wiki/Software/Xephyr/][Xephyr]]
+- One of {[[https://invisible-island.net/xterm/][xterm]], [[http://software.schmorp.de/pkg/rxvt-unicode.html][urxvt]], [[https://sw.kovidgoyal.net/kitty/][kitty]]}
+
 ** Config & Documentation
 See [[src/config.org]] for both!
