@@ -1,4 +1,4 @@
-#+TITLE: disconsis' literate XMonad configuration
+#+TITLE: A literate XMonad configuration
 #+AUTHOR: Ketan Kanishka (=disconsis=)
 #+PROPERTY: header-args :tangle "Main.hs"
 #+TODO: TODO IDEA | DONE

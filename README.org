@@ -1,4 +1,4 @@
-#+TITLE: A literate XMonad config
+#+TITLE: A literate XMonad configuration
 
 ** Features
 - WhichKey: auto-display a popup of completing keybindings
